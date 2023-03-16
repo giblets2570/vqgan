@@ -1,60 +1,59 @@
 import torch
 import torch.nn as nn
+from vqgan.basic_block import BasicBlock
+from einops import rearrange
+
 
 class CNNDiscriminator(nn.Module):
 
-    def __init__(self):
-        super().__init__(dropout_prob=0.5)
+    def __init__(self, dropout_prob=0.5):
+        super().__init__()
         # This will break the image into chunks of 4x4 to tell if it is real
         self.conv_layers = nn.Sequential(
-            nn.Conv2d(3, 16, kernel_size=3, padding='same'),
-            nn.Conv2d(16, 32, kernel_size=3, padding='same'),
-            nn.Conv2d(32, 64, kernel_size=3, padding='same'),
+            BasicBlock(3, 8, dropout_prob=dropout_prob),
+            BasicBlock(8, 16, dropout_prob=dropout_prob),
+            nn.MaxPool2d(2),
+            BasicBlock(16, 24, dropout_prob=dropout_prob),
+            BasicBlock(24, 32, dropout_prob=dropout_prob),
+            nn.MaxPool2d(2),
+            BasicBlock(32, 40, dropout_prob=dropout_prob),
+            BasicBlock(40, 48, dropout_prob=dropout_prob),
+            nn.MaxPool2d(2),
+            BasicBlock(48, 56, dropout_prob=dropout_prob),
+            BasicBlock(56, 64, dropout_prob=dropout_prob)
         )
 
-        self.bn_layers = nn.Sequential(
-            nn.BatchNorm2d(16),
-            nn.BatchNorm2d(32),
-            nn.BatchNorm2d(64)
+        self.output_layers = nn.Sequential(
+            nn.Linear(64, 32),
+            nn.ReLU(),
+            nn.Linear(32, 1)
         )
-
-        self.pooling_layers = nn.Sequential(
-            nn.MaxPool2d(2),
-            nn.MaxPool2d(2),
-            nn.MaxPool2d(2),
-        )
-        self.activation = nn.ReLU()
-        self.dropout2d = nn.Dropout2d()
-        self.dropout = nn.Dropout()
         
     def forward(self, x):
+
+        squeeze = False
+        if x.ndim == 3:
+            x = x.unsqueeze(0)
+            squeeze = True
         
-        for conv_layer, bn_layer, pool_layer in zip(self.conv_layers, self.bn_layers, self.pooling_layers):
-            x = conv_layer(x)
-            x = bn_layer(x)
-            x = self.activation(x)
-            x = pool_layer(x)
+        x = self.conv_layers(x)  # this will be shape 64 x 4 x 4
+
+        x = rearrange(x, 'b x y z -> b y z x')  # 4 x 4 x 64
+
+        x = self.output_layers(x).squeeze(-1)  # 4 x 4
+
+        if squeeze:
+            x = x.squeeze(0)
 
         return x
 
 
 
-
 if __name__ == '__main__':
-    from torchvision.datasets import CIFAR100
-    from torchvision import transforms
+    image = torch.randn(3, 32, 32)
 
-    dataset_transform = transforms.Compose([
-        transforms.RandomHorizontalFlip(p=0.5),
-        transforms.ColorJitter(),
-        transforms.PILToTensor(),
-        transforms.ConvertImageDtype(torch.float),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    ])
-    train_dataset = CIFAR100('data/', download=True, transform=dataset_transform)
-    model = CNNEncoder()
+    disc = CNNDiscriminator()
 
-    data = torch.stack((train_dataset[0][0], train_dataset[1][0]))
+    out = disc(image)
 
-
-    output = model(data)
+    print(out)

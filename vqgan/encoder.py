@@ -9,7 +9,7 @@ class CNNEncoder(nn.Module):
         super().__init__()
 
 
-        self.layers = nn.ModuleList([
+        self.layers = nn.Sequential(
             BasicBlock(3, 8),
             BasicBlock(8, 16),
             nn.MaxPool2d(2),
@@ -21,13 +21,10 @@ class CNNEncoder(nn.Module):
             nn.MaxPool2d(2),
             BasicBlock(48, 56),
             BasicBlock(56, 64, out_activation=False)
-        ])
+        )
 
     def forward(self, x):
-        
-        for layer in self.layers:
-            x = layer(x)
-        return x
+        return self.layers(x)
 
 
 

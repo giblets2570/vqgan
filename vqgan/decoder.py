@@ -7,7 +7,7 @@ class CNNDecoder(nn.Module):
     def __init__(self, dropout_prob=0.5):
         super().__init__()
 
-        self.layers = nn.ModuleList([
+        self.layers = nn.Sequential(
             BasicBlock(64, 56),
             BasicBlock(56, 48),
             nn.ConvTranspose2d(48, 48, kernel_size=4, stride=2, padding=1),
@@ -19,15 +19,13 @@ class CNNDecoder(nn.Module):
             nn.ConvTranspose2d(16, 16, kernel_size=4, stride=2, padding=1),
             BasicBlock(16, 16),
             BasicBlock(16, 8)
-        ])
+        )
 
         self.output_layer = nn.Conv2d(8, 3, kernel_size=3)
 
 
     def forward(self, x):
-        
-        for layer in self.layers:
-            x = layer(x)
+        x = self.layers(x)
         return self.output_layer(x)
 
 
