@@ -10,17 +10,17 @@ class CNNEncoder(nn.Module):
 
 
         self.layers = nn.Sequential(
-            BasicBlock(3, 8),
-            BasicBlock(8, 16),
+            BasicBlock(3, 8, dropout_prob=dropout_prob),
+            BasicBlock(8, 16, dropout_prob=dropout_prob),
             nn.MaxPool2d(2),
-            BasicBlock(16, 24),
-            BasicBlock(24, 32),
+            BasicBlock(16, 24, dropout_prob=dropout_prob),
+            BasicBlock(24, 32, dropout_prob=dropout_prob),
             nn.MaxPool2d(2),
-            BasicBlock(32, 40),
-            BasicBlock(40, 48),
+            BasicBlock(32, 40, dropout_prob=dropout_prob),
+            BasicBlock(40, 48, dropout_prob=dropout_prob),
             nn.MaxPool2d(2),
-            BasicBlock(48, 56),
-            BasicBlock(56, 64, out_activation=False)
+            BasicBlock(48, 56, dropout_prob=dropout_prob),
+            BasicBlock(56, 64, dropout_prob=dropout_prob, out_activation=False)
         )
 
     def forward(self, x):
