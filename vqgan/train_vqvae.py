@@ -15,14 +15,13 @@ class VQVAE(pl.LightningModule):
         self.codebook = CodeBook()
         self.decoder = CNNDecoder()
 
-
     def training_step(self, batch, batch_idx):
         image, _ = batch
-        
+
         z = self.encoder(image)
         z_q = self.codebook(z)
         z_r = self.codebook.decode(z_q)
-        
+
         sg1_loss = F.mse_loss(z_r, z.detach())
         sg2_loss = F.mse_loss(z, z_r.detach())
 
@@ -31,7 +30,6 @@ class VQVAE(pl.LightningModule):
 
         r_loss = F.mse_loss(r_image, image)
 
-        
         loss = r_loss + sg1_loss + sg2_loss
 
         # Logging to TensorBoard (if installed) by default
@@ -41,7 +39,7 @@ class VQVAE(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         image, _ = batch
-        
+
         z = self.encoder(image)
         z_q = self.codebook(z)
         z_r = self.codebook.decode(z_q)
@@ -52,35 +50,20 @@ class VQVAE(pl.LightningModule):
         r_loss = F.mse_loss(r_image, image)
 
         sg1_loss = F.mse_loss(z_r, z.detach())
-        
+
         # Logging to TensorBoard (if installed) by default
         self.log("val_r_loss", r_loss, prog_bar=True)
         self.log("val_sg_loss", sg1_loss, prog_bar=True)
-
 
     def configure_optimizers(self):
         optimizer = optim.Adam(self.parameters(), lr=1e-3)
         return optimizer
 
 
-
 if __name__ == "__main__":
-    from torchvision.datasets import CIFAR100
-    from torchvision import transforms
-    from torch.utils.data import DataLoader
+    from vqgan.cifar100_data import create_cifar100_dls
 
-    dataset_transform = transforms.Compose([
-        transforms.RandomHorizontalFlip(p=0.5),
-        transforms.ColorJitter(),
-        transforms.PILToTensor(),
-        transforms.ConvertImageDtype(torch.float),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    ])
-    train_dataset = CIFAR100('data/', download=True, transform=dataset_transform, train=True)
-    test_dataset = CIFAR100('data/', download=True, transform=dataset_transform, train=False)
-
-    train_dl = DataLoader(train_dataset, batch_size=32)
-    val_dl = DataLoader(test_dataset, batch_size=32)
+    train_dl, val_dl = create_cifar100_dls()
 
     vqvae = VQVAE()
 

@@ -7,6 +7,7 @@ from torch import optim
 import torch.nn.functional as F
 import torch
 import itertools
+from vqgan.perceptual_loss import PerceptualLoss
 
 
 class VQGAN(pl.LightningModule):
@@ -18,6 +19,7 @@ class VQGAN(pl.LightningModule):
         self.codebook = CodeBook()
         self.decoder = CNNDecoder()
         self.discriminator = CNNDiscriminator()
+        self.perceptual_loss = PerceptualLoss()
 
     def training_step(self, batch, batch_idx):
         image, _ = batch
@@ -27,19 +29,19 @@ class VQGAN(pl.LightningModule):
         # first train the vae
 
         self.toggle_optimizer(optimizer_vae)
-        
+
         z = self.encoder(image)
         z_q = self.codebook(z)
         z_r = self.codebook.decode(z_q)
-        
+
         sg1_loss = F.mse_loss(z_r, z.detach())
         sg2_loss = F.mse_loss(z, z_r.detach())
 
         z_r = z + (z_r - z).detach()  # trick to pass gradients
         r_image = self.decoder(z_r)
 
-        r_loss = F.mse_loss(r_image, image)
-
+        # r_loss = F.mse_loss(r_image, image)
+        r_loss = self.perceptual_loss(r_image, image)
 
         # Logging to TensorBoard (if installed) by default
         self.log("r_loss", r_loss, prog_bar=True)
@@ -47,7 +49,7 @@ class VQGAN(pl.LightningModule):
 
         # we need to add in the discriminator loss
         valid = torch.ones(image.size(0), 4, 4).type_as(image)
-    
+
         g_loss = F.binary_cross_entropy_with_logits(self.discriminator(r_image), valid)
         self.log("g_loss", g_loss, prog_bar=True)
 
@@ -67,7 +69,7 @@ class VQGAN(pl.LightningModule):
 
         z = self.encoder(image)
         z_q = self.codebook(z)
-        z_r = self.codebook.decode(z_q)        
+        z_r = self.codebook.decode(z_q)
         r_image = self.decoder(z_r)
 
         fake_loss = F.binary_cross_entropy_with_logits(self.discriminator(r_image), fake)
@@ -81,7 +83,7 @@ class VQGAN(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         image, _ = batch
-        
+
         z = self.encoder(image)
         z_q = self.codebook(z)
         z_r = self.codebook.decode(z_q)
@@ -101,7 +103,7 @@ class VQGAN(pl.LightningModule):
         fake_loss = F.binary_cross_entropy_with_logits(self.discriminator(r_image), fake)
 
         d_loss = (real_loss + fake_loss) / 2
-        
+
         # Logging to TensorBoard (if installed) by default
         self.log("val_r_loss", r_loss, prog_bar=True)
         self.log("val_sg_loss", sg1_loss, prog_bar=True)
@@ -111,14 +113,14 @@ class VQGAN(pl.LightningModule):
     def configure_optimizers(self):
         opt_vae = optim.Adam(
             itertools.chain(
-                self.encoder.parameters(), 
-                self.codebook.parameters(), 
+                self.encoder.parameters(),
+                self.codebook.parameters(),
                 self.decoder.parameters()
-            ), 
+            ),
             lr=1e-3
         )
         opt_d = optim.Adam(
-            self.discriminator.parameters(), 
+            self.discriminator.parameters(),
             lr=1e-3
         )
         return [opt_vae, opt_d], []
@@ -127,22 +129,9 @@ class VQGAN(pl.LightningModule):
 
 
 if __name__ == "__main__":
-    from torchvision.datasets import CIFAR100
-    from torchvision import transforms
-    from torch.utils.data import DataLoader
+    from vqgan.cifar100_data import create_cifar100_dls
 
-    dataset_transform = transforms.Compose([
-        transforms.RandomHorizontalFlip(p=0.5),
-        transforms.ColorJitter(),
-        transforms.PILToTensor(),
-        transforms.ConvertImageDtype(torch.float),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    ])
-    train_dataset = CIFAR100('data/', download=True, transform=dataset_transform, train=True)
-    test_dataset = CIFAR100('data/', download=True, transform=dataset_transform, train=False)
-
-    train_dl = DataLoader(train_dataset, batch_size=32)
-    val_dl = DataLoader(test_dataset, batch_size=32)
+    train_dl, val_dl = create_cifar100_dls()
 
     vqgan = VQGAN()
 

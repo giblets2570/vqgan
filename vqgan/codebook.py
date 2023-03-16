@@ -4,7 +4,7 @@ from einops import rearrange
 
 class CodeBook(nn.Module):
 
-    def __init__(self, n_codes=1024):
+    def __init__(self, n_codes=256):
         super().__init__()
 
         self.embedding = nn.Embedding(n_codes, 64)
@@ -23,7 +23,7 @@ class CodeBook(nn.Module):
         a, b, c = z.shape[-3:]
 
         x = rearrange(z, 't a b c -> t (b c) a')
-        
+
         distances = torch.cdist(x, self.embedding.weight)
         codes = distances.argmin(-1)
         codes = rearrange(codes, 't (b c) -> t b c', b=b, c=c)
