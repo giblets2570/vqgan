@@ -3,16 +3,17 @@ from torchvision import transforms
 from torch.utils.data import DataLoader
 import torch
 
-def create_cifar100_dls():
-    mean = [0.4914, 0.4822, 0.4465]
-    std = [0.2471, 0.2435, 0.2616]
+MEAN = [0.4914, 0.4822, 0.4465]
+STD = [0.2471, 0.2435, 0.2616]
 
+
+def create_cifar100_dls():
     dataset_transform = transforms.Compose([
         transforms.RandomHorizontalFlip(p=0.5),
         transforms.ColorJitter(),
         transforms.PILToTensor(),
         transforms.ConvertImageDtype(torch.float),
-        transforms.Normalize(mean=mean, std=std)
+        transforms.Normalize(mean=MEAN, std=STD)
     ])
     train_dataset = CIFAR100('data/', download=True, transform=dataset_transform, train=True)
     test_dataset = CIFAR100('data/', download=True, transform=dataset_transform, train=False)

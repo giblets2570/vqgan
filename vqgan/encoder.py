@@ -7,26 +7,27 @@ class CNNEncoder(nn.Module):
 
     def __init__(self, dropout_prob=0.5):
         super().__init__()
+        self.dropout_prob = dropout_prob
+        self.layers = self.__make_layers(3, 8, 128, 3)
+        self.to_z = nn.Linear(128, 128)
 
-
-        self.layers = nn.Sequential(
-            BasicBlock(3, 8, dropout_prob=dropout_prob),
-            BasicBlock(8, 16, dropout_prob=dropout_prob),
-            nn.MaxPool2d(2),
-            BasicBlock(16, 24, dropout_prob=dropout_prob),
-            BasicBlock(24, 32, dropout_prob=dropout_prob),
-            nn.MaxPool2d(2),
-            BasicBlock(32, 40, dropout_prob=dropout_prob),
-            BasicBlock(40, 48, dropout_prob=dropout_prob),
-            nn.MaxPool2d(2),
-            BasicBlock(48, 56, dropout_prob=dropout_prob),
-            BasicBlock(56, 64, dropout_prob=dropout_prob, out_activation=False)
-        )
+    def __make_layers(self, in_channels, spacing, out_channels, n_pools):
+        blocks = [(in_channels, spacing)]
+        while blocks[-1][-1] < out_channels:
+            in_channels = blocks[-1][-1]
+            blocks.append((in_channels, in_channels + spacing))
+        pool_spacing = len(blocks) // (n_pools + 1)
+        layers = []
+        n_pools_added = 0
+        for i, block in enumerate(blocks):
+            layers.append(BasicBlock(*block, dropout_prob=self.dropout_prob))
+            if (i + 1) % pool_spacing == 0 and n_pools_added < n_pools:
+                layers.append(nn.MaxPool2d(2))
+                n_pools_added += 1
+        return nn.Sequential(*layers)
 
     def forward(self, x):
         return self.layers(x)
-
-
 
 
 if __name__ == '__main__':
@@ -44,7 +45,6 @@ if __name__ == '__main__':
     model = CNNEncoder()
 
     data = torch.stack((train_dataset[0][0], train_dataset[1][0]))
-
 
     output = model(data)
     print(output)

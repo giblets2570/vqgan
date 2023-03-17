@@ -8,17 +8,18 @@ import torch.nn.functional as F
 import torch
 import itertools
 from vqgan.perceptual_loss import PerceptualLoss
+import torchvision
 
 
 class VQGAN(pl.LightningModule):
 
-    def __init__(self):
+    def __init__(self, dropout_prob=0.5):
         super().__init__()
         self.automatic_optimization = False
-        self.encoder = CNNEncoder()
+        self.encoder = CNNEncoder(dropout_prob=dropout_prob)
         self.codebook = CodeBook()
-        self.decoder = CNNDecoder()
-        self.discriminator = CNNDiscriminator()
+        self.decoder = CNNDecoder(dropout_prob=dropout_prob)
+        self.discriminator = CNNDiscriminator(dropout_prob=dropout_prob)
         self.perceptual_loss = PerceptualLoss()
 
     def training_step(self, batch, batch_idx):
@@ -93,6 +94,10 @@ class VQGAN(pl.LightningModule):
 
         r_loss = F.mse_loss(r_image, image)
 
+        sample_imgs = r_image[:6]
+        grid = torchvision.utils.make_grid(sample_imgs)
+        self.logger.experiment.add_image("reconstructed_images", grid, 0)
+
         sg1_loss = F.mse_loss(z_r, z.detach())
         valid = torch.ones(image.size(0), 4, 4).type_as(image)
         g_loss = F.binary_cross_entropy_with_logits(self.discriminator(r_image), valid)
@@ -119,11 +124,15 @@ class VQGAN(pl.LightningModule):
             ),
             lr=1e-3
         )
+        optim.lr_scheduler.ReduceLROnPlateau(opt_vae)
         opt_d = optim.Adam(
             self.discriminator.parameters(),
             lr=1e-3
         )
-        return [opt_vae, opt_d], []
+        return [opt_vae, opt_d], [
+            optim.lr_scheduler.ReduceLROnPlateau(opt_vae),
+            optim.lr_scheduler.ReduceLROnPlateau(opt_d)
+        ]
 
 
 
@@ -133,7 +142,7 @@ if __name__ == "__main__":
 
     train_dl, val_dl = create_cifar100_dls()
 
-    vqgan = VQGAN()
+    vqgan = VQGAN(dropout_prob=0.5)
 
     trainer = pl.Trainer(max_epochs=100)
     trainer.fit(model=vqgan, train_dataloaders=train_dl, val_dataloaders=val_dl)

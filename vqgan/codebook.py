@@ -4,10 +4,10 @@ from einops import rearrange
 
 class CodeBook(nn.Module):
 
-    def __init__(self, n_codes=256):
+    def __init__(self, n_codes=256, embedding_dim=128):
         super().__init__()
 
-        self.embedding = nn.Embedding(n_codes, 64)
+        self.embedding = nn.Embedding(n_codes, embedding_dim)
 
     def forward(self, z):
         """This will compute the z_q, z quantized.
