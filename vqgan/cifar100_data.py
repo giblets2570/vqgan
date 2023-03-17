@@ -7,18 +7,19 @@ MEAN = [0.4914, 0.4822, 0.4465]
 STD = [0.2471, 0.2435, 0.2616]
 
 
-def create_cifar100_dls():
-    dataset_transform = transforms.Compose([
-        transforms.RandomHorizontalFlip(p=0.5),
-        transforms.ColorJitter(),
+def create_cifar100_dls(use_color_jitter=True, batch_size=32):
+    transform_list = [
+        transforms.RandomHorizontalFlip(p=0.5)
+    ] + ([transforms.ColorJitter()] if use_color_jitter else []) + [
         transforms.PILToTensor(),
         transforms.ConvertImageDtype(torch.float),
         transforms.Normalize(mean=MEAN, std=STD)
-    ])
+    ]
+    dataset_transform = transforms.Compose(transform_list)
     train_dataset = CIFAR100('data/', download=True, transform=dataset_transform, train=True)
     test_dataset = CIFAR100('data/', download=True, transform=dataset_transform, train=False)
 
-    train_dl = DataLoader(train_dataset, batch_size=32)
-    val_dl = DataLoader(test_dataset, batch_size=32)
+    train_dl = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    val_dl = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
     return train_dl, val_dl

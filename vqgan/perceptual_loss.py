@@ -1,4 +1,3 @@
-import torchvision.models as models
 import torch.nn as nn
 import torch.nn.functional as F
 from vqgan.mobilenet import mobilenet_v2
@@ -6,7 +5,12 @@ from vqgan.vgg import vgg19_bn
 
 
 class PerceptualLoss(nn.Module):
-    def __init__(self, layers=[3, 5, 9, 11, 15], layer_weights=[0.2, 0.2, 0.2, 0.2, 0.2], model='mobilenet_v2'):
+    def __init__(
+        self,
+        layers=[3, 5, 9, 11, 15],
+        layer_weights=[0.2, 0.2, 0.2, 0.2, 0.2],
+        model='mobilenet_v2'
+    ):
         super().__init__()
         self.layers = layers
         self.layer_weights = layer_weights

@@ -5,11 +5,10 @@ from vqgan.basic_block import BasicBlock
 
 class CNNEncoder(nn.Module):
 
-    def __init__(self, dropout_prob=0.5):
+    def __init__(self, dropout_prob=0.5, spacing=8, out_channels=128, n_pools=3):
         super().__init__()
         self.dropout_prob = dropout_prob
-        self.layers = self.__make_layers(3, 8, 128, 3)
-        self.to_z = nn.Linear(128, 128)
+        self.layers = self.__make_layers(3, spacing, out_channels, n_pools)
 
     def __make_layers(self, in_channels, spacing, out_channels, n_pools):
         blocks = [(in_channels, spacing)]
