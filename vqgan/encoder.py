@@ -29,6 +29,7 @@ class CNNEncoder(nn.Module):
             BasicBlock(num_channels, num_channels, dropout_prob=dropout_prob),
         )
         self.group_norm = nn.GroupNorm(4, num_channels)
+        self.swish = nn.SiLU()
         self.out_conv = nn.Conv2d(
             num_channels, out_channels, kernel_size=3, padding=1)
 
@@ -57,6 +58,8 @@ class CNNEncoder(nn.Module):
         x = self.first_conv(x)
         x = self.residual_layers(x)
         x = self.non_local_block(x)
+        x = self.group_norm(x)
+        x = self.swish(x)
         return self.out_conv(x)
 
 
