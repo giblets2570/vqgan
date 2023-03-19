@@ -28,16 +28,20 @@ class VQVAE(pl.LightningModule):
         n_codes=256,
         latent_dim=128,
         spacing=8,
-        n_pools=3
+        n_pools=3,
+        beta=0.05
     ):
         super().__init__()
-        self.encoder = CNNEncoder(out_channels=latent_dim, spacing=spacing, n_pools=n_pools)
+        self.encoder = CNNEncoder(
+            out_channels=latent_dim, spacing=spacing, n_pools=n_pools)
         self.codebook = CodeBook(latent_dim=latent_dim, n_codes=n_codes)
-        self.decoder = CNNDecoder(in_channels=latent_dim, spacing=spacing, n_transposes=n_pools)
+        self.decoder = CNNDecoder(
+            in_channels=latent_dim, spacing=spacing, n_transposes=n_pools)
         if feat_model is None:
             self.perceptual_loss = None
         else:
             self.perceptual_loss = PerceptualLoss(model=feat_model)
+        self.beta = beta
 
     def training_step(self, batch, batch_idx):
         image, _ = batch
@@ -46,13 +50,14 @@ class VQVAE(pl.LightningModule):
         z_q = self.codebook(z)
         z_r = self.codebook.decode(z_q)
 
-        sg1_loss = F.mse_loss(z_r, z.detach())
-        sg2_loss = F.mse_loss(z, z_r.detach())
+        sg_loss = F.mse_loss(z_r, z.detach()) + F.mse_loss(z, z_r.detach())
+        self.log("sg_loss", sg_loss / 2, prog_bar=True)
 
         z_r = z + (z_r - z).detach()  # trick to pass gradients
         r_image = self.decoder(z_r)
 
         r_loss = F.mse_loss(r_image, image)
+        self.log("r_loss", r_loss, prog_bar=True)
 
         if self.perceptual_loss is not None:
             perceptual_loss = self.perceptual_loss(r_image, image)
@@ -60,11 +65,8 @@ class VQVAE(pl.LightningModule):
         else:
             perceptual_loss = 0
 
-        loss = r_loss + perceptual_loss + sg1_loss + sg2_loss
+        loss = r_loss + perceptual_loss + self.beta * sg_loss
 
-        # Logging to TensorBoard (if installed) by default
-        self.log("r_loss", r_loss, prog_bar=True)
-        self.log("sg_loss", sg1_loss, prog_bar=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -79,8 +81,10 @@ class VQVAE(pl.LightningModule):
 
         if batch_idx == 0:
             sample_imgs, sample_rimgs = get_sample_imgs(image, r_image)
-            grid = torchvision.utils.make_grid(torch.cat((sample_imgs, sample_rimgs)), nrow=6)
-            self.logger.experiment.add_image("real_images", grid, self.trainer.current_epoch)
+            grid = torchvision.utils.make_grid(
+                torch.cat((sample_imgs, sample_rimgs)), nrow=6)
+            self.logger.experiment.add_image(
+                "real_images", grid, self.trainer.current_epoch)
 
         r_loss = F.mse_loss(r_image, image)
         if self.perceptual_loss is not None:
