@@ -26,14 +26,14 @@ class VQVAE(pl.LightningModule):
         self,
         feat_model='mobilenet_v2',
         n_codes=256,
-        embedding_dim=128,
+        latent_dim=128,
         spacing=8,
         n_pools=3
     ):
         super().__init__()
-        self.encoder = CNNEncoder(out_channels=embedding_dim, spacing=spacing, n_pools=n_pools)
-        self.codebook = CodeBook(embedding_dim=embedding_dim, n_codes=n_codes)
-        self.decoder = CNNDecoder(in_channels=embedding_dim, spacing=spacing, n_transposes=n_pools)
+        self.encoder = CNNEncoder(out_channels=latent_dim, spacing=spacing, n_pools=n_pools)
+        self.codebook = CodeBook(latent_dim=latent_dim, n_codes=n_codes)
+        self.decoder = CNNDecoder(in_channels=latent_dim, spacing=spacing, n_transposes=n_pools)
         if feat_model is None:
             self.perceptual_loss = None
         else:
@@ -110,8 +110,8 @@ if __name__ == "__main__":
     from vqgan.cifar100_data import create_cifar100_dls
 
     parser = ArgumentParser()
-    parser.add_argument('--feat-model', default='mobilenet_v2', type=str)
-    parser.add_argument('--embedding-dim', default=128, type=int)
+    parser.add_argument('--feat-model', default='none', type=str)
+    parser.add_argument('--latent-dim', default=128, type=int)
     parser.add_argument('--spacing', default=8, type=int)
     parser.add_argument('--n-codes', default=256, type=int)
     parser.add_argument('--n-pools', default=3, type=int)
@@ -126,7 +126,7 @@ if __name__ == "__main__":
 
     vqvae = VQVAE(
         feat_model=args.feat_model,
-        embedding_dim=args.embedding_dim,
+        latent_dim=args.latent_dim,
         spacing=args.spacing
     )
 

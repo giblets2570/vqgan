@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from vqgan.basic_block import BasicBlock
 from vqgan.non_local_block import NonLocalBlock
+from vqgan.upsample_block import UpSampleBlock
 
 
 class CNNDecoder(nn.Module):
@@ -56,7 +57,7 @@ class CNNDecoder(nn.Module):
             layers.append(BasicBlock(*block, dropout_prob=self.dropout_prob))
             if (i + 1) % transpose_spacing == 0 and n_transposes_added < n_transposes:
                 channels = block[-1]
-                layers.append(nn.ConvTranspose2d(channels, channels, kernel_size=2, stride=2, padding=0))
+                layers.append(UpSampleBlock(channels, channels))
                 n_transposes_added += 1
         assert n_transposes_added == n_transposes, 'not enough conv transposes added'
         return nn.Sequential(*layers)

@@ -1,6 +1,7 @@
 import torch.nn as nn
 from vqgan.basic_block import BasicBlock
 from vqgan.non_local_block import NonLocalBlock
+from vqgan.downsample_block import DownSampleBlock
 
 
 class CNNEncoder(nn.Module):
@@ -49,8 +50,9 @@ class CNNEncoder(nn.Module):
         n_pools_added = 0
         for i, block in enumerate(blocks):
             layers.append(BasicBlock(*block, dropout_prob=self.dropout_prob))
+            channels = block[-1]
             if (i + 1) % pool_spacing == 0 and n_pools_added < n_pools:
-                layers.append(nn.MaxPool2d(2))
+                layers.append(DownSampleBlock(channels, channels))
                 n_pools_added += 1
         return nn.Sequential(*layers)
 
