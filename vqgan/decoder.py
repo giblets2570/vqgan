@@ -1,22 +1,54 @@
 import torch
 import torch.nn as nn
 from vqgan.basic_block import BasicBlock
+from vqgan.non_local_block import NonLocalBlock
 
 
 class CNNDecoder(nn.Module):
 
-    def __init__(self, dropout_prob=0.5, spacing=8, in_channels=128, n_transposes=3):
+    def __init__(
+        self,
+        dropout_prob=0.5,
+        spacing=8,
+        in_channels=128,
+        n_transposes=3
+    ):
         super().__init__()
         self.dropout_prob = dropout_prob
-        self.layers = self.__make_layers(in_channels, spacing, spacing, n_transposes)
-        self.output_layer = nn.Conv2d(3, 3, kernel_size=3, padding='same')
 
-    def __make_layers(self, in_channels, spacing, out_channels, n_transposes):
+        b_channels = in_channels - spacing
+
+        self.first_conv = nn.Conv2d(
+            in_channels,
+            b_channels,
+            kernel_size=3,
+            padding=1
+        )
+
+        self.non_local_block = nn.Sequential(
+            BasicBlock(b_channels, b_channels, dropout_prob=dropout_prob),
+            NonLocalBlock(b_channels),
+            BasicBlock(b_channels, b_channels, dropout_prob=dropout_prob),
+        )
+
+        self.residual_layers = self.__make_residual_layers(
+            b_channels,
+            spacing,
+            spacing,
+            n_transposes
+        )
+
+        n_channels = self.residual_layers[-1].conv1.out_channels
+        self.group_norm = nn.GroupNorm(4, n_channels)
+        self.swish = nn.SiLU()
+
+        self.output_layer = nn.Conv2d(n_channels, 3, kernel_size=3, padding=1)
+
+    def __make_residual_layers(self, in_channels, spacing, out_channels, n_transposes):
         blocks = [(in_channels, in_channels - spacing)]
         while blocks[-1][-1] > out_channels:
             in_channels = blocks[-1][-1]
             blocks.append((in_channels, in_channels - spacing))
-        blocks.append((blocks[-1][-1], 3))
         transpose_spacing = len(blocks) // (n_transposes + 1)
         layers = []
         n_transposes_added = 0
@@ -26,10 +58,16 @@ class CNNDecoder(nn.Module):
                 channels = block[-1]
                 layers.append(nn.ConvTranspose2d(channels, channels, kernel_size=2, stride=2, padding=0))
                 n_transposes_added += 1
+        assert n_transposes_added == n_transposes, 'not enough conv transposes added'
         return nn.Sequential(*layers)
 
     def forward(self, x):
-        return self.output_layer(self.layers(x))
+        x = self.first_conv(x)
+        x = self.non_local_block(x)
+        x = self.residual_layers(x)
+        x = self.group_norm(x)
+        x = self.swish(x)
+        return self.output_layer(x)
 
 
 if __name__ == '__main__':

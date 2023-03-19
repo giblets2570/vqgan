@@ -22,16 +22,16 @@ class CNNEncoder(nn.Module):
             n_pools
         )
 
-        num_channels = self.residual_layers[-1].conv1.out_channels
+        n_channels = self.residual_layers[-1].conv1.out_channels
         self.non_local_block = nn.Sequential(
-            BasicBlock(num_channels, num_channels, dropout_prob=dropout_prob),
-            NonLocalBlock(num_channels),
-            BasicBlock(num_channels, num_channels, dropout_prob=dropout_prob),
+            BasicBlock(n_channels, n_channels, dropout_prob=dropout_prob),
+            NonLocalBlock(n_channels),
+            BasicBlock(n_channels, n_channels, dropout_prob=dropout_prob),
         )
-        self.group_norm = nn.GroupNorm(4, num_channels)
+        self.group_norm = nn.GroupNorm(4, n_channels)
         self.swish = nn.SiLU()
         self.out_conv = nn.Conv2d(
-            num_channels, out_channels, kernel_size=3, padding=1)
+            n_channels, out_channels, kernel_size=3, padding=1)
 
     def __make_residual_layers(
         self,
