@@ -9,6 +9,7 @@ class CNNDecoder(nn.Module):
         super().__init__()
         self.dropout_prob = dropout_prob
         self.layers = self.__make_layers(in_channels, spacing, spacing, n_transposes)
+        self.output_layer = nn.Conv2d(3, 3, kernel_size=3, padding='same')
 
     def __make_layers(self, in_channels, spacing, out_channels, n_transposes):
         blocks = [(in_channels, in_channels - spacing)]
@@ -20,8 +21,7 @@ class CNNDecoder(nn.Module):
         layers = []
         n_transposes_added = 0
         for i, block in enumerate(blocks):
-            out_activation = (i == len(blocks) - 1)  # the last layer
-            layers.append(BasicBlock(*block, dropout_prob=self.dropout_prob, out_activation=out_activation))
+            layers.append(BasicBlock(*block, dropout_prob=self.dropout_prob))
             if (i + 1) % transpose_spacing == 0 and n_transposes_added < n_transposes:
                 channels = block[-1]
                 layers.append(nn.ConvTranspose2d(channels, channels, kernel_size=2, stride=2, padding=0))
@@ -29,7 +29,7 @@ class CNNDecoder(nn.Module):
         return nn.Sequential(*layers)
 
     def forward(self, x):
-        return self.layers(x)
+        return self.output_layer(self.layers(x))
 
 
 if __name__ == '__main__':

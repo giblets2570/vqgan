@@ -1,11 +1,16 @@
-import torch
 import torch.nn as nn
 from vqgan.basic_block import BasicBlock
 
 
 class CNNEncoder(nn.Module):
 
-    def __init__(self, dropout_prob=0.5, spacing=8, out_channels=128, n_pools=3):
+    def __init__(
+        self,
+        dropout_prob=0.5,
+        spacing=8,
+        out_channels=128,
+        n_pools=3
+    ):
         super().__init__()
         self.dropout_prob = dropout_prob
         self.layers = self.__make_layers(3, spacing, out_channels, n_pools)
@@ -27,23 +32,3 @@ class CNNEncoder(nn.Module):
 
     def forward(self, x):
         return self.layers(x)
-
-
-if __name__ == '__main__':
-    from torchvision.datasets import CIFAR100
-    from torchvision import transforms
-
-    dataset_transform = transforms.Compose([
-        transforms.RandomHorizontalFlip(p=0.5),
-        transforms.ColorJitter(),
-        transforms.PILToTensor(),
-        transforms.ConvertImageDtype(torch.float),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    ])
-    train_dataset = CIFAR100('data/', download=True, transform=dataset_transform)
-    model = CNNEncoder()
-
-    data = torch.stack((train_dataset[0][0], train_dataset[1][0]))
-
-    output = model(data)
-    print(output)

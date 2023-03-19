@@ -79,7 +79,7 @@ class VQVAE(pl.LightningModule):
 
         if batch_idx == 0:
             sample_imgs, sample_rimgs = get_sample_imgs(image, r_image)
-            grid = torchvision.utils.make_grid(torch.cat((sample_imgs, sample_rimgs)), nrow=2)
+            grid = torchvision.utils.make_grid(torch.cat((sample_imgs, sample_rimgs)), nrow=6)
             self.logger.experiment.add_image("real_images", grid, self.trainer.current_epoch)
 
         r_loss = F.mse_loss(r_image, image)
