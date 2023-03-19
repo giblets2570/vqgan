@@ -48,4 +48,6 @@ if __name__ == '__main__':
 
     output = block(inp)
 
+    nn.GroupNorm(32, 64)
+
     print(output)

@@ -1,5 +1,6 @@
 import torch.nn as nn
 from vqgan.basic_block import BasicBlock
+from vqgan.non_local_block import NonLocalBlock
 
 
 class CNNEncoder(nn.Module):
@@ -13,11 +14,33 @@ class CNNEncoder(nn.Module):
     ):
         super().__init__()
         self.dropout_prob = dropout_prob
-        self.layers = self.__make_layers(3, spacing, out_channels, n_pools)
+        self.first_conv = nn.Conv2d(3, spacing, kernel_size=3, padding=1)
+        self.residual_layers = self.__make_residual_layers(
+            spacing,
+            spacing,
+            out_channels,
+            n_pools
+        )
 
-    def __make_layers(self, in_channels, spacing, out_channels, n_pools):
+        num_channels = self.residual_layers[-1].conv1.out_channels
+        self.non_local_block = nn.Sequential(
+            BasicBlock(num_channels, num_channels, dropout_prob=dropout_prob),
+            NonLocalBlock(num_channels),
+            BasicBlock(num_channels, num_channels, dropout_prob=dropout_prob),
+        )
+        self.group_norm = nn.GroupNorm(4, num_channels)
+        self.out_conv = nn.Conv2d(
+            num_channels, out_channels, kernel_size=3, padding=1)
+
+    def __make_residual_layers(
+        self,
+        in_channels,
+        spacing,
+        out_channels,
+        n_pools
+    ):
         blocks = [(in_channels, spacing)]
-        while blocks[-1][-1] < out_channels:
+        while blocks[-1][-1] < out_channels - spacing:
             in_channels = blocks[-1][-1]
             blocks.append((in_channels, in_channels + spacing))
         pool_spacing = len(blocks) // (n_pools + 1)
@@ -31,4 +54,18 @@ class CNNEncoder(nn.Module):
         return nn.Sequential(*layers)
 
     def forward(self, x):
-        return self.layers(x)
+        x = self.first_conv(x)
+        x = self.residual_layers(x)
+        x = self.non_local_block(x)
+        return self.out_conv(x)
+
+
+if __name__ == '__main__':
+    import torch
+    encoder = CNNEncoder()
+
+    inp = torch.randn(4, 3, 32, 32)
+
+    out = encoder(inp)
+
+    print(out)
