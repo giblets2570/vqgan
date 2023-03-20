@@ -29,7 +29,7 @@ class NonLocalBlock(nn.Module):
         phi = rearrange(phi, 'b x y z -> b z (x y)')
         g = rearrange(g, 'b x y z -> b (x y) z')
 
-        theta_phi = theta.bmm(phi).softmax(-1)
+        theta_phi = theta.bmm(phi).softmax(-2)
         theta_phi_g = theta_phi.bmm(g)
 
         theta_phi_g = rearrange(theta_phi_g, 'b (x y) z -> b x y z', x=x, y=y)

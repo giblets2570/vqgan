@@ -28,8 +28,8 @@ class VQVAE(pl.LightningModule):
         n_codes=256,
         latent_dim=128,
         spacing=8,
-        n_pools=3,
-        beta=0.05
+        m=3,
+        beta=0.02
     ):
         super().__init__()
         self.encoder = CNNEncoder(

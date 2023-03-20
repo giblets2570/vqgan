@@ -1,7 +1,8 @@
 import torch.nn as nn
-from vqgan.basic_block import BasicBlock
+from vqgan.residual_block import ResidualBlock
 from vqgan.non_local_block import NonLocalBlock
 from vqgan.downsample_block import DownSampleBlock
+import math
 
 
 class CNNEncoder(nn.Module):
@@ -11,54 +12,39 @@ class CNNEncoder(nn.Module):
         dropout_prob=0.5,
         spacing=8,
         out_channels=128,
-        n_pools=3
+        m=3
     ):
         super().__init__()
         self.dropout_prob = dropout_prob
-        self.first_conv = nn.Conv2d(3, spacing, kernel_size=3, padding=1)
-        self.residual_layers = self.__make_residual_layers(
-            spacing,
-            spacing,
-            out_channels,
-            n_pools
-        )
+        self.cs = self.__find_cs(m, out_channels)
+        self.first_conv = nn.Conv2d(3, self.cs[0], kernel_size=3, padding=1)
 
-        n_channels = self.residual_layers[-1].conv1.out_channels
+        res_downsample_layers = []
+        for i, channels in enumerate(self.cs[:-1]):
+            res_downsample_layers.append(
+                ResidualBlock(channels, self.cs[i + 1]))
+            res_downsample_layers.append(
+                DownSampleBlock(self.cs[i + 1], self.cs[i + 1]))
+
+        self.res_downsample_layers = nn.Sequential(*res_downsample_layers)
+
         self.non_local_block = nn.Sequential(
-            BasicBlock(n_channels, n_channels, dropout_prob=dropout_prob),
-            NonLocalBlock(n_channels),
-            BasicBlock(n_channels, n_channels, dropout_prob=dropout_prob),
+            ResidualBlock(self.cs[-1], self.cs[-1], dropout_prob=dropout_prob),
+            NonLocalBlock(self.cs[-1]),
+            ResidualBlock(self.cs[-1], self.cs[-1], dropout_prob=dropout_prob),
         )
-        self.group_norm = nn.GroupNorm(4, n_channels)
+        n_groups = math.gcd(24, self.cs[-1])
+        self.group_norm = nn.GroupNorm(n_groups, self.cs[-1])
         self.swish = nn.SiLU()
         self.out_conv = nn.Conv2d(
-            n_channels, out_channels, kernel_size=3, padding=1)
+            self.cs[-1], out_channels, kernel_size=3, padding=1)
 
-    def __make_residual_layers(
-        self,
-        in_channels,
-        spacing,
-        out_channels,
-        n_pools
-    ):
-        blocks = [(in_channels, spacing)]
-        while blocks[-1][-1] < out_channels - spacing:
-            in_channels = blocks[-1][-1]
-            blocks.append((in_channels, in_channels + spacing))
-        pool_spacing = len(blocks) // (n_pools + 1)
-        layers = []
-        n_pools_added = 0
-        for i, block in enumerate(blocks):
-            layers.append(BasicBlock(*block, dropout_prob=self.dropout_prob))
-            channels = block[-1]
-            if (i + 1) % pool_spacing == 0 and n_pools_added < n_pools:
-                layers.append(DownSampleBlock(channels, channels))
-                n_pools_added += 1
-        return nn.Sequential(*layers)
+    def __find_cs(self, m, out_channels):
+        return [(out_channels * i) // (m + 2) for i in range(1, m + 2)]
 
     def forward(self, x):
         x = self.first_conv(x)
-        x = self.residual_layers(x)
+        x = self.res_downsample_layers(x)
         x = self.non_local_block(x)
         x = self.group_norm(x)
         x = self.swish(x)
