@@ -2,14 +2,16 @@ import torch
 import torch.nn as nn
 from einops import rearrange
 
+
 class CodeBook(nn.Module):
 
-    def __init__(self, n_codes=256, latent_dim=128):
+    def __init__(self, n_codes=256, latent_dim=128, use_sampling=False):
         super().__init__()
 
         self.embedding = nn.Embedding(n_codes, latent_dim)
+        self.use_sampling = use_sampling
 
-    def forward(self, z):
+    def forward(self, z, sample=True):
         """This will compute the z_q, z quantized.
 
         Args:
@@ -25,7 +27,10 @@ class CodeBook(nn.Module):
         x = rearrange(z, 't a b c -> t (b c) a')
 
         distances = torch.cdist(x, self.embedding.weight)
-        codes = distances.argmin(-1)
+        if self.use_sampling and sample:
+            codes = torch.distributions.Categorical(logits=-distances).sample()
+        else:
+            codes = distances.argmin(-1)
         codes = rearrange(codes, 't (b c) -> t b c', b=b, c=c)
         if squeeze:
             codes = codes.squeeze(0)
@@ -41,6 +46,7 @@ class CodeBook(nn.Module):
         if squeeze:
             result = result.squeeze(0)
         return result
+
 
 if __name__ == "__main__":
     codebook = CodeBook()

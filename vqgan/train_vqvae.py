@@ -8,6 +8,8 @@ import torch.nn.functional as F
 import torch
 import torchvision
 from vqgan.cifar100_data import MEAN, STD
+import random
+from copy import deepcopy
 
 
 def get_sample_imgs(image, r_image):
@@ -29,24 +31,44 @@ class VQVAE(pl.LightningModule):
         latent_dim=128,
         spacing=8,
         m=3,
-        beta=0.02
+        beta=0.02,
+        dropout_prob=0.5,
+        use_noise=False,
+        use_codebook_sampling=False
     ):
         super().__init__()
         self.encoder = CNNEncoder(
-            out_channels=latent_dim, spacing=spacing, n_pools=n_pools)
-        self.codebook = CodeBook(latent_dim=latent_dim, n_codes=n_codes)
+            out_channels=latent_dim, m=m, dropout_prob=dropout_prob)
+        self.codebook = CodeBook(
+            latent_dim=latent_dim, n_codes=n_codes, use_sampling=use_codebook_sampling)
         self.decoder = CNNDecoder(
-            in_channels=latent_dim, spacing=spacing, n_transposes=n_pools)
+            in_channels=latent_dim, m=m, dropout_prob=dropout_prob)
         if feat_model is None:
             self.perceptual_loss = None
         else:
             self.perceptual_loss = PerceptualLoss(model=feat_model)
         self.beta = beta
+        self.use_noise = use_noise
 
     def training_step(self, batch, batch_idx):
         image, _ = batch
 
-        z = self.encoder(image)
+        if self.use_noise:
+            # choose 30% of the input images
+            bs = image.shape[0]
+            n = (bs * 3) // 10
+            mask = torch.full((bs, ), False).to(image.device)
+            noise_idx = random.choices(range(bs), k=n)
+            for idx in noise_idx:
+                mask[idx] = True
+            inp_image = deepcopy(image)
+            noise = torch.randn_like(
+                inp_image[mask]) * torch.sqrt(torch.tensor(0.1, device=image.device))
+            inp_image[mask] = inp_image[mask] + noise
+        else:
+            inp_image = image
+
+        z = self.encoder(inp_image)
         z_q = self.codebook(z)
         z_r = self.codebook.decode(z_q)
 
@@ -116,10 +138,13 @@ if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument('--feat-model', default='none', type=str)
     parser.add_argument('--latent-dim', default=128, type=int)
-    parser.add_argument('--spacing', default=8, type=int)
     parser.add_argument('--n-codes', default=256, type=int)
-    parser.add_argument('--n-pools', default=3, type=int)
+    parser.add_argument('--m', default=3, type=int)
     parser.add_argument('--batch-size', default=32, type=int)
+    parser.add_argument('--dropout-prob', default=0.5, type=float)
+    parser.add_argument('--beta', default=0.2, type=float)
+    parser.add_argument('--use-noise', action='store_true')
+    parser.add_argument('--use-codebook-sampling', action='store_true')
 
     args = parser.parse_args()
 
@@ -131,7 +156,12 @@ if __name__ == "__main__":
     vqvae = VQVAE(
         feat_model=args.feat_model,
         latent_dim=args.latent_dim,
-        spacing=args.spacing
+        dropout_prob=args.dropout_prob,
+        n_codes=args.n_codes,
+        m=args.m,
+        beta=args.beta,
+        use_noise=args.use_noise,
+        use_codebook_sampling=args.use_codebook_sampling
     )
 
     trainer = pl.Trainer(max_epochs=300)

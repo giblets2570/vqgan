@@ -9,7 +9,6 @@ class CNNEncoder(nn.Module):
     def __init__(
         self,
         dropout_prob=0.5,
-        spacing=8,
         out_channels=128,
         m=3
     ):
@@ -33,6 +32,7 @@ class CNNEncoder(nn.Module):
             ResidualBlock(self.cs[-1], self.cs[-1], dropout_prob=dropout_prob),
         )
         n_groups = self.__find_n_groups(self.cs[-1])
+        print(f'Using {n_groups} groups for group norm in encoder')
         self.group_norm = nn.GroupNorm(n_groups, self.cs[-1])
         self.swish = nn.SiLU()
         self.out_conv = nn.Conv2d(

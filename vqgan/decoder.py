@@ -10,7 +10,6 @@ class CNNDecoder(nn.Module):
     def __init__(
         self,
         dropout_prob=0.5,
-        spacing=8,
         in_channels=128,
         m=3
     ):
@@ -41,6 +40,7 @@ class CNNDecoder(nn.Module):
         self.res_upsample_layers = nn.Sequential(*res_upsample_layers)
 
         n_groups = self.__find_n_groups(self.cs[-1])
+        print(f'Using {n_groups} groups for group norm in decoder')
         self.group_norm = nn.GroupNorm(n_groups, self.cs[-1])
         self.swish = nn.SiLU()
 
