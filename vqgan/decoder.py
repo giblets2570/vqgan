@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from vqgan.basic_block import BasicBlock
+from vqgan.residual_block import ResidualBlock
 from vqgan.non_local_block import NonLocalBlock
 from vqgan.upsample_block import UpSampleBlock
 
@@ -12,60 +12,54 @@ class CNNDecoder(nn.Module):
         dropout_prob=0.5,
         spacing=8,
         in_channels=128,
-        n_transposes=3
+        m=3
     ):
         super().__init__()
         self.dropout_prob = dropout_prob
-
-        b_channels = in_channels - spacing
+        self.cs = self.__find_cs(m, in_channels)
 
         self.first_conv = nn.Conv2d(
             in_channels,
-            b_channels,
+            self.cs[0],
             kernel_size=3,
             padding=1
         )
 
         self.non_local_block = nn.Sequential(
-            BasicBlock(b_channels, b_channels, dropout_prob=dropout_prob),
-            NonLocalBlock(b_channels),
-            BasicBlock(b_channels, b_channels, dropout_prob=dropout_prob),
+            ResidualBlock(self.cs[0], self.cs[0], dropout_prob=dropout_prob),
+            NonLocalBlock(self.cs[0]),
+            ResidualBlock(self.cs[0], self.cs[0], dropout_prob=dropout_prob),
         )
 
-        self.residual_layers = self.__make_residual_layers(
-            b_channels,
-            spacing,
-            spacing,
-            n_transposes
-        )
+        res_upsample_layers = []
+        for i, channels in enumerate(self.cs[:-1]):
+            res_upsample_layers.append(
+                ResidualBlock(channels, self.cs[i + 1]))
+            res_upsample_layers.append(
+                UpSampleBlock(self.cs[i + 1], self.cs[i + 1]))
 
-        n_channels = self.residual_layers[-1].conv1.out_channels
-        self.group_norm = nn.GroupNorm(4, n_channels)
+        self.res_upsample_layers = nn.Sequential(*res_upsample_layers)
+
+        n_groups = self.__find_n_groups(self.cs[-1])
+        self.group_norm = nn.GroupNorm(n_groups, self.cs[-1])
         self.swish = nn.SiLU()
 
-        self.output_layer = nn.Conv2d(n_channels, 3, kernel_size=3, padding=1)
+        self.output_layer = nn.Conv2d(self.cs[-1], 3, kernel_size=3, padding=1)
 
-    def __make_residual_layers(self, in_channels, spacing, out_channels, n_transposes):
-        blocks = [(in_channels, in_channels - spacing)]
-        while blocks[-1][-1] > out_channels:
-            in_channels = blocks[-1][-1]
-            blocks.append((in_channels, in_channels - spacing))
-        transpose_spacing = len(blocks) // (n_transposes + 1)
-        layers = []
-        n_transposes_added = 0
-        for i, block in enumerate(blocks):
-            layers.append(BasicBlock(*block, dropout_prob=self.dropout_prob))
-            if (i + 1) % transpose_spacing == 0 and n_transposes_added < n_transposes:
-                channels = block[-1]
-                layers.append(UpSampleBlock(channels, channels))
-                n_transposes_added += 1
-        assert n_transposes_added == n_transposes, 'not enough conv transposes added'
-        return nn.Sequential(*layers)
+    def __find_cs(self, m, in_channels):
+        return [(in_channels * i) // (m + 2) for i in range(1, m + 2)][::-1]
+
+    def __find_n_groups(self, in_channels):
+        # Find an n groups between 4 and 12
+        for i in range(4, 13):
+            if in_channels % i == 0:
+                return i
+        return 1
 
     def forward(self, x):
         x = self.first_conv(x)
         x = self.non_local_block(x)
-        x = self.residual_layers(x)
+        x = self.res_upsample_layers(x)
         x = self.group_norm(x)
         x = self.swish(x)
         return self.output_layer(x)

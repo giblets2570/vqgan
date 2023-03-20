@@ -2,7 +2,6 @@ import torch.nn as nn
 from vqgan.residual_block import ResidualBlock
 from vqgan.non_local_block import NonLocalBlock
 from vqgan.downsample_block import DownSampleBlock
-import math
 
 
 class CNNEncoder(nn.Module):
@@ -33,7 +32,7 @@ class CNNEncoder(nn.Module):
             NonLocalBlock(self.cs[-1]),
             ResidualBlock(self.cs[-1], self.cs[-1], dropout_prob=dropout_prob),
         )
-        n_groups = math.gcd(24, self.cs[-1])
+        n_groups = self.__find_n_groups(self.cs[-1])
         self.group_norm = nn.GroupNorm(n_groups, self.cs[-1])
         self.swish = nn.SiLU()
         self.out_conv = nn.Conv2d(
@@ -41,6 +40,13 @@ class CNNEncoder(nn.Module):
 
     def __find_cs(self, m, out_channels):
         return [(out_channels * i) // (m + 2) for i in range(1, m + 2)]
+
+    def __find_n_groups(self, in_channels):
+        # Find an n groups between 4 and 12
+        for i in range(4, 13):
+            if in_channels % i == 0:
+                return i
+        return 1
 
     def forward(self, x):
         x = self.first_conv(x)
