@@ -29,7 +29,6 @@ class VQVAE(pl.LightningModule):
         feat_model='mobilenet_v2',
         n_codes=256,
         latent_dim=128,
-        spacing=8,
         m=3,
         beta=0.02,
         dropout_prob=0.5,
