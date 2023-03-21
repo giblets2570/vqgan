@@ -1,32 +1,21 @@
 from vqgan.encoder import CNNEncoder
 from vqgan.decoder import CNNDecoder
 from vqgan.codebook import CodeBook
-from vqgan.perceptual_loss import PerceptualLoss
 import pytorch_lightning as pl
 from torch import optim
 import torch.nn.functional as F
 import torch
 import torchvision
-from vqgan.cifar100_data import MEAN, STD
 import random
 from copy import deepcopy
-
-
-def get_sample_imgs(image, r_image):
-
-    trans = torchvision.transforms.Normalize(
-        mean=[-m/s for m, s in zip(MEAN, STD)],
-        std=[1/s for s in STD]
-    )
-
-    return trans(image[:6]), trans(r_image[:6])
+from lpips import LPIPS
 
 
 class VQVAE(pl.LightningModule):
 
     def __init__(
         self,
-        feat_model='mobilenet_v2',
+        feat_model='vgg',
         n_codes=256,
         latent_dim=128,
         m=3,
@@ -46,7 +35,7 @@ class VQVAE(pl.LightningModule):
         if feat_model is None:
             self.perceptual_loss = None
         else:
-            self.perceptual_loss = PerceptualLoss(model=feat_model)
+            self.perceptual_loss = LPIPS(net=feat_model)
         self.beta = beta
         self.use_noise = use_noise
 
@@ -72,8 +61,8 @@ class VQVAE(pl.LightningModule):
         z_q = self.codebook(z)
         z_r = self.codebook.decode(z_q)
 
-        sg_loss = F.mse_loss(z_r, z.detach()) + F.mse_loss(z, z_r.detach())
-        self.log("sg_loss", sg_loss / 2, prog_bar=True)
+        c_loss = F.mse_loss(z_r, z.detach()) + F.mse_loss(z, z_r.detach())
+        self.log("c_loss", c_loss / 2, prog_bar=True)
 
         z_r = z + (z_r - z).detach()  # trick to pass gradients
         r_image = self.decoder(z_r)
@@ -82,12 +71,12 @@ class VQVAE(pl.LightningModule):
         self.log("r_loss", r_loss, prog_bar=True)
 
         if self.perceptual_loss is not None:
-            perceptual_loss = self.perceptual_loss(r_image, image)
+            perceptual_loss = self.perceptual_loss(r_image, image).mean()
             self.log("perceptual_loss", perceptual_loss, prog_bar=True)
         else:
             perceptual_loss = 0
 
-        loss = r_loss + perceptual_loss + self.beta * sg_loss
+        loss = r_loss + perceptual_loss + self.beta * c_loss
 
         return loss
 
@@ -102,25 +91,26 @@ class VQVAE(pl.LightningModule):
         r_image = self.decoder(z_r)
 
         if batch_idx == 0:
-            sample_imgs, sample_rimgs = get_sample_imgs(image, r_image)
+            def denorm_imgs(imgs):
+                return (imgs + 1) / 2
             grid = torchvision.utils.make_grid(
-                torch.cat((sample_imgs, sample_rimgs)), nrow=6)
+                torch.cat((denorm_imgs(image)[:6], denorm_imgs(r_image)[:6])), nrow=6)
             self.logger.experiment.add_image(
-                "real_images", grid, self.trainer.current_epoch)
+                "recontructed", grid, self.trainer.current_epoch)
 
         r_loss = F.mse_loss(r_image, image)
         if self.perceptual_loss is not None:
-            perceptual_loss = self.perceptual_loss(r_image, image)
+            perceptual_loss = self.perceptual_loss(r_image, image).mean()
             self.log("val_perceptual_loss", perceptual_loss, prog_bar=True)
         else:
             perceptual_loss = 0  # for the below logger of val_loss
-        sg1_loss = F.mse_loss(z_r, z.detach())
+        c1_loss = F.mse_loss(z_r, z.detach())
 
         # Logging to TensorBoard (if installed) by default
         self.log("val_r_loss", r_loss, prog_bar=True)
-        self.log("val_sg_loss", sg1_loss, prog_bar=True)
+        self.log("val_c_loss", c1_loss, prog_bar=True)
 
-        self.log("val_loss", r_loss + perceptual_loss + 2 * sg1_loss)
+        self.log("val_loss", r_loss + perceptual_loss + 2 * c1_loss)
 
     def configure_optimizers(self):
         optimizer = optim.Adam(self.parameters(), lr=1e-3)

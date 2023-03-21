@@ -3,8 +3,9 @@ from torchvision import transforms
 from torch.utils.data import DataLoader
 import torch
 
-MEAN = [0.4914, 0.4822, 0.4465]
-STD = [0.2471, 0.2435, 0.2616]
+# this will convert everything to between -1 and 1
+MEAN = [0.5, 0.5, 0.5]
+STD = [0.5, 0.5, 0.5]
 
 
 def create_cifar100_dls(use_color_jitter=True, batch_size=32):
@@ -16,8 +17,10 @@ def create_cifar100_dls(use_color_jitter=True, batch_size=32):
         transforms.Normalize(mean=MEAN, std=STD)
     ]
     dataset_transform = transforms.Compose(transform_list)
-    train_dataset = CIFAR100('data/', download=True, transform=dataset_transform, train=True)
-    test_dataset = CIFAR100('data/', download=True, transform=dataset_transform, train=False)
+    train_dataset = CIFAR100('data/', download=True,
+                             transform=dataset_transform, train=True)
+    test_dataset = CIFAR100('data/', download=True,
+                            transform=dataset_transform, train=False)
 
     train_dl = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     val_dl = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)

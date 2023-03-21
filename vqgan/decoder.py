@@ -44,7 +44,10 @@ class CNNDecoder(nn.Module):
         self.group_norm = nn.GroupNorm(n_groups, self.cs[-1])
         self.swish = nn.SiLU()
 
-        self.output_layer = nn.Conv2d(self.cs[-1], 3, kernel_size=3, padding=1)
+        self.output_layer = nn.Sequential(
+            nn.Conv2d(self.cs[-1], 3, kernel_size=3, padding=1),
+            nn.Tanh()
+        )
 
     def __find_cs(self, m, in_channels):
         return [(in_channels * i) // (m + 2) for i in range(1, m + 2)][::-1]

@@ -28,7 +28,7 @@ class TrainCodeGenerator(pl.LightningModule):
 
         with torch.no_grad():
             z = self.encoder(image)
-            codes = self.codebook(z)
+            codes = self.codebook(z, sample=False)
             # codes will be in the shape  h x w
             codes = rearrange(codes, 'b x y -> b (x y)')
 
@@ -49,7 +49,7 @@ class TrainCodeGenerator(pl.LightningModule):
         bs = image.shape[0]
 
         z = self.encoder(image)
-        codes = self.codebook(z)
+        codes = self.codebook(z, sample=False)
         # codes will be in the shape  h x w
         codes = rearrange(codes, 'b x y -> b (x y)')
 
