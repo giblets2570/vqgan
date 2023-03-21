@@ -35,7 +35,7 @@ class VQVAE(pl.LightningModule):
         if feat_model is None:
             self.perceptual_loss = None
         else:
-            self.perceptual_loss = LPIPS(net=feat_model)
+            self.perceptual_loss = LPIPS(net=feat_model, lpips=False)
         self.beta = beta
         self.use_noise = use_noise
 
