@@ -7,6 +7,8 @@ class CodeBook(nn.Module):
 
     def __init__(self, n_codes=256, latent_dim=128, use_sampling=False):
         super().__init__()
+        self.n_codes = n_codes
+        self.latent_dim = latent_dim
 
         self.embedding = nn.Embedding(n_codes, latent_dim)
         self.use_sampling = use_sampling

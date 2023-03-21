@@ -36,6 +36,7 @@ class VQVAE(pl.LightningModule):
         use_codebook_sampling=False
     ):
         super().__init__()
+        self.save_hyperparameters()
         self.encoder = CNNEncoder(
             out_channels=latent_dim, m=m, dropout_prob=dropout_prob)
         self.codebook = CodeBook(

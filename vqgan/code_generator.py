@@ -1,5 +1,4 @@
 import torch.nn as nn
-from einops import rearrange
 
 
 class Head(nn.Module):
@@ -33,8 +32,6 @@ class CodeGenerator(nn.Module):
         self.output_layer = Head(embedding_dim, n_codes)
 
     def forward(self, codes):
-        # codes will be in the shape  h x w
-        codes = rearrange(codes, 'b x y -> b (x y)')
         # embed the codes
         embeddings = self.embedding(codes)
         # create the masks
