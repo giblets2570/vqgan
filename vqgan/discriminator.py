@@ -1,59 +1,42 @@
 import torch
 import torch.nn as nn
-from vqgan.basic_block import BasicBlock
-from einops import rearrange
+from vqgan.residual_block import ResidualBlock
+from vqgan.downsample_block import DownSampleBlock
 
 
 class CNNDiscriminator(nn.Module):
 
-    def __init__(self, dropout_prob=0.5):
-        super().__init__()
-        # This will break the image into chunks of 4x4 to tell if it is real
-        self.conv_layers = nn.Sequential(
-            BasicBlock(3, 8, dropout_prob=dropout_prob),
-            BasicBlock(8, 16, dropout_prob=dropout_prob),
-            nn.MaxPool2d(2),
-            BasicBlock(16, 24, dropout_prob=dropout_prob),
-            BasicBlock(24, 32, dropout_prob=dropout_prob),
-            nn.MaxPool2d(2),
-            BasicBlock(32, 40, dropout_prob=dropout_prob),
-            BasicBlock(40, 48, dropout_prob=dropout_prob),
-            nn.MaxPool2d(2),
-            BasicBlock(48, 56, dropout_prob=dropout_prob),
-            BasicBlock(56, 64, dropout_prob=dropout_prob)
-        )
+    def __init__(self, in_channels=3, out_channels=1, m=3, dropout_prob=0.5):
+        super(CNNDiscriminator, self).__init__()
+        self.dropout_prob = dropout_prob
+        self.first_conv = nn.Conv2d(in_channels, 32, kernel_size=3, padding=1)
+        res_downsample_layers = []
+        for i in range(m):
+            in_c = 32 * (i + 1)
+            out_c = in_c + 32
+            res_downsample_layers.append(
+                ResidualBlock(in_c, out_c, dropout_prob=dropout_prob))
+            res_downsample_layers.append(
+                DownSampleBlock(out_c, out_c))
 
-        self.output_layers = nn.Sequential(
-            nn.Linear(64, 32),
-            nn.ReLU(),
-            nn.Linear(32, 1)
-        )
-        
+        self.res_downsample_layers = nn.Sequential(*res_downsample_layers)
+
+        in_c = (m + 1) * 32
+        self.output_layer = nn.Conv2d(
+            in_c, out_channels, kernel_size=3, stride=1, padding=1)
+
     def forward(self, x):
-
-        squeeze = False
-        if x.ndim == 3:
-            x = x.unsqueeze(0)
-            squeeze = True
-        
-        x = self.conv_layers(x)  # this will be shape 64 x 4 x 4
-
-        x = rearrange(x, 'b x y z -> b y z x')  # 4 x 4 x 64
-
-        x = self.output_layers(x).squeeze(-1)  # 4 x 4
-
-        if squeeze:
-            x = x.squeeze(0)
-
+        x = self.first_conv(x)
+        x = self.res_downsample_layers(x)
+        x = self.output_layer(x).squeeze(-3)
         return x
 
 
-
 if __name__ == '__main__':
-    image = torch.randn(3, 32, 32)
+    image = torch.randn(1, 3, 32, 32)
 
-    disc = CNNDiscriminator()
+    discriminator = CNNDiscriminator(3, 1)
 
-    out = disc(image)
+    output = discriminator(image)
 
-    print(out)
+    print(output)

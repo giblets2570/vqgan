@@ -7,6 +7,7 @@ import torch
 from einops import rearrange
 import torch.nn.functional as F
 from vqgan.metrics import PerPositionAccuracy
+import pandas as pd
 
 
 class TrainCodeGenerator(pl.LightningModule):
@@ -24,7 +25,7 @@ class TrainCodeGenerator(pl.LightningModule):
                 self.codebook.parameters(), self.encoder.parameters()):
             param.requires_grad = False
 
-        n_positions = 32 // self.encoder.m
+        n_positions = (32 // 2 ** self.encoder.m) ** 2
 
         self.train_pp_acc = PerPositionAccuracy(
             n_positions=n_positions, n_codes=self.codebook.n_codes)
@@ -49,14 +50,17 @@ class TrainCodeGenerator(pl.LightningModule):
 
         # now we pass the codes through the code generator
         outputs = self.code_generator(source_codes)
-        loss = F.cross_entropy(outputs.transpose(2, 1), codes)
+        loss = F.cross_entropy(outputs.transpose(2, 1)[
+                               :, :, 63:], codes[:, 63:])
         self.log('loss', loss, prog_bar=True)
         self.train_pp_acc(outputs.argmax(-1), codes)
         return loss
 
     def on_train_epoch_end(self):
-        self.logger.experiment.add_histogram(
-            'train_pp_acc', self.train_pp_acc.compute())
+        train_pp_acc = self.train_pp_acc.compute()
+        ax = pd.DataFrame(train_pp_acc.cpu().numpy()).plot()
+        self.logger.experiment.add_figure(
+            'train_pp_acc', ax.figure, global_step=self.trainer.current_epoch)
         self.train_pp_acc.reset()
 
     def validation_step(self, batch, batch_idx):
@@ -81,8 +85,10 @@ class TrainCodeGenerator(pl.LightningModule):
         self.val_pp_acc(outputs.argmax(-1), codes)
 
     def on_validation_epoch_end(self):
-        self.logger.experiment.add_histogram(
-            'val_pp_acc', self.val_pp_acc.compute())
+        val_pp_acc = self.val_pp_acc.compute()
+        ax = pd.DataFrame(val_pp_acc.cpu().numpy()).plot()
+        self.logger.experiment.add_figure(
+            'val_pp_acc', ax.figure, global_step=self.trainer.current_epoch)
         self.val_pp_acc.reset()
 
     def configure_optimizers(self):

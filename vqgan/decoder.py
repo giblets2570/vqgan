@@ -33,7 +33,7 @@ class CNNDecoder(nn.Module):
         res_upsample_layers = []
         for i, channels in enumerate(self.cs[:-1]):
             res_upsample_layers.append(
-                ResidualBlock(channels, self.cs[i + 1]))
+                ResidualBlock(channels, self.cs[i + 1], dropout_prob=dropout_prob))
             res_upsample_layers.append(
                 UpSampleBlock(self.cs[i + 1], self.cs[i + 1]))
 

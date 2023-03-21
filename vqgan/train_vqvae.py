@@ -67,13 +67,13 @@ class VQVAE(pl.LightningModule):
         z_r = z + (z_r - z).detach()  # trick to pass gradients
         r_image = self.decoder(z_r)
 
-        r_loss = F.mse_loss(r_image, image)
-        self.log("r_loss", r_loss, prog_bar=True)
-
         if self.perceptual_loss is not None:
+            r_loss = 0
             perceptual_loss = self.perceptual_loss(r_image, image).mean()
             self.log("perceptual_loss", perceptual_loss, prog_bar=True)
         else:
+            r_loss = F.mse_loss(r_image, image)
+            self.log("r_loss", r_loss, prog_bar=True)
             perceptual_loss = 0
 
         loss = r_loss + perceptual_loss + self.beta * c_loss

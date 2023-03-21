@@ -11,6 +11,8 @@ class CodeBook(nn.Module):
         self.latent_dim = latent_dim
 
         self.embedding = nn.Embedding(n_codes, latent_dim)
+        self.embedding.weight.data = torch.ones_like(
+            self.embedding.weight) / latent_dim
         self.use_sampling = use_sampling
 
     def forward(self, z, sample=True):
