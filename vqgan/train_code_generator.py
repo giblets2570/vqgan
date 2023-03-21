@@ -6,6 +6,7 @@ import itertools
 import torch
 from einops import rearrange
 import torch.nn.functional as F
+from vqgan.metrics import PerPositionAccuracy
 
 
 class TrainCodeGenerator(pl.LightningModule):
@@ -19,8 +20,16 @@ class TrainCodeGenerator(pl.LightningModule):
         self.code_generator = CodeGenerator(
             n_codes=self.codebook.n_codes + 1, embedding_dim=128)
         # we add an extra token that will act as start/stop
-        for param in itertools.chain(self.codebook.parameters(), self.encoder.parameters()):
+        for param in itertools.chain(
+                self.codebook.parameters(), self.encoder.parameters()):
             param.requires_grad = False
+
+        n_positions = 32 // self.encoder.m
+
+        self.train_pp_acc = PerPositionAccuracy(
+            n_positions=n_positions, n_codes=self.codebook.n_codes)
+        self.val_pp_acc = PerPositionAccuracy(
+            n_positions=n_positions, n_codes=self.codebook.n_codes)
 
     def training_step(self, batch, batch_idx):
         image, _ = batch
@@ -42,7 +51,13 @@ class TrainCodeGenerator(pl.LightningModule):
         outputs = self.code_generator(source_codes)
         loss = F.cross_entropy(outputs.transpose(2, 1), codes)
         self.log('loss', loss, prog_bar=True)
+        self.train_pp_acc(outputs.argmax(-1), codes)
         return loss
+
+    def on_train_epoch_end(self):
+        self.logger.experiment.add_histogram(
+            'train_pp_acc', self.train_pp_acc.compute())
+        self.train_pp_acc.reset()
 
     def validation_step(self, batch, batch_idx):
         image, _ = batch
@@ -63,6 +78,12 @@ class TrainCodeGenerator(pl.LightningModule):
         outputs = self.code_generator(source_codes)
         loss = F.cross_entropy(outputs.transpose(2, 1), codes)
         self.log('val_loss', loss, prog_bar=True)
+        self.val_pp_acc(outputs.argmax(-1), codes)
+
+    def on_validation_epoch_end(self):
+        self.logger.experiment.add_histogram(
+            'val_pp_acc', self.val_pp_acc.compute())
+        self.val_pp_acc.reset()
 
     def configure_optimizers(self):
         optimizer = optim.Adam(self.parameters(), lr=1e-3)
@@ -76,7 +97,8 @@ class TrainCodeGenerator(pl.LightningModule):
 if __name__ == '__main__':
     from vqgan.cifar100_data import create_cifar100_dls
 
-    module = TrainCodeGenerator('./vqvae.ckpt')
+    module = TrainCodeGenerator(
+        './lightning_logs/version_2/checkpoints/epoch=39-step=62520.ckpt')
     train_dl, val_dl = create_cifar100_dls(batch_size=32)
 
     trainer = pl.Trainer(max_epochs=300)

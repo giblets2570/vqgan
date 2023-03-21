@@ -28,7 +28,7 @@ class CodeGenerator(nn.Module):
         decoder_layer = nn.TransformerEncoderLayer(embedding_dim, nhead=8)
         norm = nn.LayerNorm(embedding_dim)
         self.decoder = nn.TransformerEncoder(
-            decoder_layer, num_layers=3, norm=norm)
+            decoder_layer, num_layers=1, norm=norm)
         self.output_layer = Head(embedding_dim, n_codes)
 
     def forward(self, codes):

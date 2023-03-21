@@ -16,7 +16,7 @@ class CNNEncoder(nn.Module):
         self.dropout_prob = dropout_prob
         self.cs = self.__find_cs(m, out_channels)
         self.first_conv = nn.Conv2d(3, self.cs[0], kernel_size=3, padding=1)
-
+        self.m = m
         res_downsample_layers = []
         for i, channels in enumerate(self.cs[:-1]):
             res_downsample_layers.append(

@@ -16,7 +16,7 @@ class CNNDecoder(nn.Module):
         super().__init__()
         self.dropout_prob = dropout_prob
         self.cs = self.__find_cs(m, in_channels)
-
+        self.m = m
         self.first_conv = nn.Conv2d(
             in_channels,
             self.cs[0],
