@@ -70,7 +70,7 @@ class VQVAE(pl.LightningModule):
         if self.perceptual_loss is not None:
             r_loss = 0
             perceptual_loss = self.perceptual_loss(r_image, image).mean()
-            self.log("perceptual_loss", perceptual_loss, prog_bar=True)
+            self.log("p_loss", perceptual_loss, prog_bar=True)
         else:
             r_loss = F.mse_loss(r_image, image)
             self.log("r_loss", r_loss, prog_bar=True)
@@ -101,7 +101,7 @@ class VQVAE(pl.LightningModule):
         r_loss = F.mse_loss(r_image, image)
         if self.perceptual_loss is not None:
             perceptual_loss = self.perceptual_loss(r_image, image).mean()
-            self.log("val_perceptual_loss", perceptual_loss, prog_bar=True)
+            self.log("val_p_loss", perceptual_loss, prog_bar=True)
         else:
             perceptual_loss = 0  # for the below logger of val_loss
         c1_loss = F.mse_loss(z_r, z.detach())
