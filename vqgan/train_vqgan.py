@@ -68,6 +68,14 @@ class VQGAN(pl.LightningModule):
         inp_image[mask] = inp_image[mask] + noise
         return inp_image
 
+    def __plot_images(self, image, r_image):
+        def denorm_imgs(imgs):
+            return (imgs + 1) / 2
+        grid = torchvision.utils.make_grid(
+            torch.cat((denorm_imgs(image)[:6], denorm_imgs(r_image)[:6])), nrow=6)
+        self.logger.experiment.add_image(
+            "recontructed", grid, self.trainer.current_epoch)
+
     def training_step(self, batch, batch_idx):
         image, _ = batch
         inp_image = self.__add_noise(image) if self.use_noise else image
@@ -88,22 +96,22 @@ class VQGAN(pl.LightningModule):
         self.log("r_loss", r_loss, prog_bar=True)
 
         # gan loss
-        disc_image = self.discriminator(image)
-        valid = torch.ones_like(disc_image)
-        real_loss = F.binary_cross_entropy_with_logits(
-            disc_image, valid)
+        # disc_image = self.discriminator(image)
+        # valid = torch.ones_like(disc_image)
+        # real_loss = F.binary_cross_entropy_with_logits(
+        #     disc_image, valid)
 
-        fake = torch.zeros_like(valid)
-        fake_loss = F.binary_cross_entropy_with_logits(
-            self.discriminator(r_image), fake)
+        # fake = torch.zeros_like(valid)
+        # fake_loss = F.binary_cross_entropy_with_logits(
+        #     self.discriminator(r_image), fake)
 
-        g_loss = (real_loss + fake_loss) / 2
-        self.log("g_loss", g_loss, prog_bar=True)
+        # g_loss = (real_loss + fake_loss) / 2
+        # self.log("g_loss", g_loss, prog_bar=True)
 
-        lamb = self.__compute_lamb(p_loss, g_loss, self.trainer.current_epoch)
-        self.log("lamb", lamb, prog_bar=True)
-        loss = p_loss + self.beta * c_loss + lamb * g_loss
-        return loss
+        # lamb = self.__compute_lamb(p_loss, g_loss, self.trainer.current_epoch)
+        # self.log("lamb", lamb, prog_bar=True)
+        # loss = p_loss + self.beta * c_loss + lamb * g_loss
+        return p_loss + self.beta * c_loss
 
     def validation_step(self, batch, batch_idx):
         image, _ = batch
@@ -117,6 +125,9 @@ class VQGAN(pl.LightningModule):
 
         z_r = z + (z_r - z).detach()  # trick to pass gradients
         r_image = self.decoder(z_r)
+
+        if batch_idx == 0:
+            self.__plot_images(image, r_image)
 
         p_loss = self.perceptual_loss(r_image, image).mean()
         self.log("val_p_loss", p_loss, prog_bar=True)

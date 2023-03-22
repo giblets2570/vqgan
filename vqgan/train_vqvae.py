@@ -39,23 +39,32 @@ class VQVAE(pl.LightningModule):
         self.beta = beta
         self.use_noise = use_noise
 
+    def __add_noise(self, image):
+        bs = image.shape[0]
+        n = (bs * 3) // 10
+        mask = torch.full((bs, ), False).to(image.device)
+        noise_idx = random.choices(range(bs), k=n)
+        for idx in noise_idx:
+            mask[idx] = True
+        inp_image = deepcopy(image)
+        noise = torch.randn_like(
+            inp_image[mask]
+        ) * torch.sqrt(torch.tensor(0.1, device=image.device))
+        inp_image[mask] = inp_image[mask] + noise
+        return inp_image
+
+    def __plot_images(self, image, r_image):
+        def denorm_imgs(imgs):
+            return (imgs + 1) / 2
+        grid = torchvision.utils.make_grid(
+            torch.cat((denorm_imgs(image)[:6], denorm_imgs(r_image)[:6])), nrow=6)
+        self.logger.experiment.add_image(
+            "recontructed", grid, self.trainer.current_epoch)
+
     def training_step(self, batch, batch_idx):
         image, _ = batch
 
-        if self.use_noise:
-            # choose 30% of the input images
-            bs = image.shape[0]
-            n = (bs * 3) // 10
-            mask = torch.full((bs, ), False).to(image.device)
-            noise_idx = random.choices(range(bs), k=n)
-            for idx in noise_idx:
-                mask[idx] = True
-            inp_image = deepcopy(image)
-            noise = torch.randn_like(
-                inp_image[mask]) * torch.sqrt(torch.tensor(0.1, device=image.device))
-            inp_image[mask] = inp_image[mask] + noise
-        else:
-            inp_image = image
+        inp_image = self.__add_noise(image) if self.use_noise else image
 
         z = self.encoder(inp_image)
         z_q = self.codebook(z)
@@ -91,12 +100,7 @@ class VQVAE(pl.LightningModule):
         r_image = self.decoder(z_r)
 
         if batch_idx == 0:
-            def denorm_imgs(imgs):
-                return (imgs + 1) / 2
-            grid = torchvision.utils.make_grid(
-                torch.cat((denorm_imgs(image)[:6], denorm_imgs(r_image)[:6])), nrow=6)
-            self.logger.experiment.add_image(
-                "recontructed", grid, self.trainer.current_epoch)
+            self.__plot_images(image, r_image)
 
         r_loss = F.mse_loss(r_image, image)
         if self.perceptual_loss is not None:
@@ -124,6 +128,7 @@ class VQVAE(pl.LightningModule):
 if __name__ == "__main__":
     from argparse import ArgumentParser
     from vqgan.cifar100_data import create_cifar100_dls
+    from pytorch_lightning.loggers import TensorBoardLogger
 
     parser = ArgumentParser()
     parser.add_argument('--feat-model', default='none', type=str)
@@ -154,7 +159,14 @@ if __name__ == "__main__":
         use_codebook_sampling=args.use_codebook_sampling
     )
 
-    trainer = pl.Trainer(max_epochs=300)
+    trainer = pl.Trainer(
+        max_epochs=300,
+        logger=TensorBoardLogger(
+            save_dir='lightning_logs/',
+            name='vqvae',
+            sub_dir=f'nc={args.n_codes},ld={args.latent_dim},m={args.m},b={args.beta},d={args.dropout_prob}'
+        )
+    )
     trainer.fit(
         model=vqvae,
         train_dataloaders=train_dl,
