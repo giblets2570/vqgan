@@ -1,4 +1,5 @@
 from vqgan.train_vqvae import VQVAE
+from vqgan.train_vqgan import VQGAN
 from sklearn.manifold import TSNE
 import streamlit as st
 import pandas as pd
@@ -29,7 +30,10 @@ if checkpoint_path:
 
     st.text(f"Using {checkpoint_path}")
 
-    model = VQVAE.load_from_checkpoint(checkpoint_path).eval().to(DEVICE)
+    try:
+        model = VQVAE.load_from_checkpoint(checkpoint_path).eval().to(DEVICE)
+    except:
+        model = VQGAN.load_from_checkpoint(checkpoint_path).eval().to(DEVICE)
 
     codes = model.codebook.embedding.weight.detach().cpu().numpy()
 
@@ -90,9 +94,9 @@ if checkpoint_path:
     eps = 0.0
 
     with st.spinner("Finding clusters..."):
-        while n_clusters_ == 0:
+        while n_clusters_ < np.sqrt(model.codebook.n_codes):
             eps += 0.5
-            db = DBSCAN(eps=1).fit(codes)
+            db = DBSCAN(eps=eps).fit(codes)
             labels = db.labels_
 
             # Number of clusters in labels, ignoring noise if present.
