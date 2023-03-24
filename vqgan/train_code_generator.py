@@ -14,6 +14,7 @@ class CodeGenerator(pl.LightningModule):
 
     def __init__(self, checkpoint_path: str):
         super().__init__()
+        self.save_hyperparameters()
         self.checkpoint_path = checkpoint_path
         vqvae = VQVAE.load_from_checkpoint(checkpoint_path)
         self.encoder = vqvae.encoder

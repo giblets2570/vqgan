@@ -31,5 +31,5 @@ def create_cifar100_dls(use_color_jitter=True, batch_size=32):
 
 
 if __name__ == '__main__':
-    train_dataset = CIFAR10('data/', download=True)
+    train_dataset = CIFAR100('data/', download=True)
     print(train_dataset)
