@@ -13,6 +13,21 @@ import random
 from copy import deepcopy
 
 
+class MovingAverage:
+
+    def __init__(self, n_values):
+        self.n_values = n_values
+        self.values = []
+
+    def add(self, value):
+        self.values.append(value)
+        self.values = self.values[-self.n_values:]
+        return self
+
+    def get(self):
+        return sum(self.values) / len(self.values)
+
+
 class VQGAN2(pl.LightningModule):
 
     def __init__(
@@ -25,7 +40,8 @@ class VQGAN2(pl.LightningModule):
         dropout_prob=0.1,
         use_noise=False,
         use_codebook_sampling=True,
-        n_warmup_epochs=2
+        n_warmup_epochs=5,
+        n_critic=5
     ):
         super().__init__()
         self.automatic_optimization = False
@@ -41,22 +57,23 @@ class VQGAN2(pl.LightningModule):
         self.beta = beta
         self.use_noise = use_noise
         self.n_warmup_epochs = n_warmup_epochs
+        self.lambda_ma = MovingAverage(5)
+        self.n_critic = n_critic
 
     def __compute_lamb(self, p_loss, gan_loss, current_epoch):
         lamb = 0
-        if current_epoch < self.n_warmup_epochs:
-            return lamb
-        delta = 1e-6
-        numerators = torch.autograd.grad(
-            p_loss, self.decoder.output_layer.parameters(), retain_graph=True)
-        denominators = torch.autograd.grad(
-            gan_loss, self.decoder.output_layer.parameters(), retain_graph=True)
+        if current_epoch >= self.n_warmup_epochs:
+            delta = 1e-6
+            numerators = torch.autograd.grad(
+                p_loss, self.decoder.output_layer.parameters(), retain_graph=True)
+            denominators = torch.autograd.grad(
+                gan_loss, self.decoder.output_layer.parameters(), retain_graph=True)
 
-        for numerator, denominator in zip(numerators, denominators):
-            lamb += (torch.linalg.vector_norm(numerator) /
-                     (torch.linalg.vector_norm(denominator) + delta))
-        lamb = lamb.clip(0, 100)
-        return lamb
+            for numerator, denominator in zip(numerators, denominators):
+                lamb += (torch.linalg.vector_norm(numerator) /
+                         (torch.linalg.vector_norm(denominator) + delta))
+            lamb = lamb.clip(0, 100)
+        return self.lambda_ma.add(lamb).get()
 
     def __add_noise(self, image):
         bs = image.shape[0]
@@ -125,6 +142,11 @@ class VQGAN2(pl.LightningModule):
         c_loss = F.mse_loss(z_r, z.detach()) + F.mse_loss(z, z_r.detach())
         self.log("c_loss", c_loss / 2, prog_bar=True)
 
+        # we need to add in the discriminator loss
+        # I dont want the gradients to reach the encoder
+        t_loss = F.binary_cross_entropy_with_logits(
+            self.discriminator(self.decoder(z_r)), valid)
+
         z_r = z + (z_r - z).detach()  # trick to pass gradients
         r_image = self.decoder(z_r)
 
@@ -135,15 +157,12 @@ class VQGAN2(pl.LightningModule):
         self.log("r_loss", r_loss, prog_bar=True)
         self.log("p_loss", p_loss, prog_bar=True)
 
-        # we need to add in the discriminator loss
-        t_loss = F.binary_cross_entropy_with_logits(
-            self.discriminator(self.decoder(z_r).detach()), valid)
         self.log("t_loss", t_loss, prog_bar=True)
-
-        vae_loss = p_loss + self.beta * c_loss + lamb * t_loss
-        self.manual_backward(vae_loss)
-        optimizer_vae.step()
-        optimizer_vae.zero_grad()
+        if lamb == 0 or (batch_idx + 1) % self.n_critic == 0:
+            vae_loss = p_loss + self.beta * c_loss + lamb * t_loss
+            self.manual_backward(vae_loss)
+            optimizer_vae.step()
+            optimizer_vae.zero_grad()
         self.untoggle_optimizer(optimizer_vae)
 
     def validation_step(self, batch, batch_idx):
@@ -211,7 +230,7 @@ if __name__ == "__main__":
     from pytorch_lightning.loggers import TensorBoardLogger
 
     parser = ArgumentParser()
-    parser.add_argument('--feat-model', default='none', type=str)
+    parser.add_argument('--feat-model', default='vgg', type=str)
     parser.add_argument('--latent-dim', default=128, type=int)
     parser.add_argument('--n-codes', default=256, type=int)
     parser.add_argument('--m', default=3, type=int)

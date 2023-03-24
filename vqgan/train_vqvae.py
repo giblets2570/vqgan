@@ -131,11 +131,11 @@ if __name__ == "__main__":
     from pytorch_lightning.loggers import TensorBoardLogger
 
     parser = ArgumentParser()
-    parser.add_argument('--feat-model', default='none', type=str)
+    parser.add_argument('--feat-model', default='vgg', type=str)
     parser.add_argument('--latent-dim', default=128, type=int)
     parser.add_argument('--n-codes', default=256, type=int)
     parser.add_argument('--m', default=3, type=int)
-    parser.add_argument('--batch-size', default=32, type=int)
+    parser.add_argument('--batch-size', default=256, type=int)
     parser.add_argument('--dropout-prob', default=0.5, type=float)
     parser.add_argument('--beta', default=0.2, type=float)
     parser.add_argument('--use-noise', action='store_true')
