@@ -8,7 +8,7 @@ MEAN = [0.5, 0.5, 0.5]
 STD = [0.5, 0.5, 0.5]
 
 
-def create_cifar100_dls(use_color_jitter=True, batch_size=32):
+def create_dls(use_color_jitter=True, batch_size=32, dataset='cifar100'):
     transform_list = [
         transforms.RandomHorizontalFlip(p=0.5)
     ] + ([transforms.ColorJitter()] if use_color_jitter else []) + [
@@ -17,10 +17,17 @@ def create_cifar100_dls(use_color_jitter=True, batch_size=32):
         transforms.Normalize(mean=MEAN, std=STD)
     ]
     dataset_transform = transforms.Compose(transform_list)
-    train_dataset = CIFAR100('data/', download=True,
-                             transform=dataset_transform, train=True)
-    test_dataset = CIFAR100('data/', download=True,
-                            transform=dataset_transform, train=False)
+
+    dataset_class = None
+    if dataset == 'cifar100':
+        dataset_class = CIFAR100
+    elif dataset == 'cifar10':
+        dataset_class = CIFAR10
+
+    train_dataset = dataset_class('data/', download=True,
+                                  transform=dataset_transform, train=True)
+    test_dataset = dataset_class('data/', download=True,
+                                 transform=dataset_transform, train=False)
 
     train_dl = DataLoader(
         train_dataset, batch_size=batch_size, shuffle=True)

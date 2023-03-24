@@ -53,7 +53,8 @@ class AE(pl.LightningModule):
             sample_imgs = get_sample_imgs(r_image)
 
             grid = torchvision.utils.make_grid(sample_imgs)
-            self.logger.experiment.add_image("reconstructed_images", grid, self.trainer.current_epoch)
+            self.logger.experiment.add_image(
+                "reconstructed_images", grid, self.trainer.current_epoch)
 
         r_loss = F.mse_loss(r_image, image)
         perceptual_loss = self.perceptual_loss(r_image, image)
@@ -74,16 +75,17 @@ class AE(pl.LightningModule):
 
 if __name__ == "__main__":
     from argparse import ArgumentParser
-    from vqgan.cifar100_data import create_cifar100_dls
+    from vqgan.cifar100_data import create_dls
 
     parser = ArgumentParser()
     parser.add_argument('--feat-model', default='mobilenet_v2', type=str)
-    parser.add_argument('--no-color-jitter', action='store_true', default=False)
+    parser.add_argument('--no-color-jitter',
+                        action='store_true', default=False)
 
     args = parser.parse_args()
 
     use_color_jitter = not args.no_color_jitter
-    train_dl, val_dl = create_cifar100_dls(use_color_jitter)
+    train_dl, val_dl = create_dls(use_color_jitter)
 
     ae = AE(feat_model=args.feat_model)
 

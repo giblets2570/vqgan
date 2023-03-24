@@ -108,12 +108,12 @@ class CodeGenerator(pl.LightningModule):
 
 
 if __name__ == '__main__':
-    from vqgan.cifar100_data import create_cifar100_dls
+    from vqgan.cifar100_data import create_dls
     from pytorch_lightning.loggers import TensorBoardLogger
 
     module = CodeGenerator(
         './lightning_logs/vqvae/version_1/checkpoints/epoch=98-step=154737.ckpt')
-    train_dl, val_dl = create_cifar100_dls(batch_size=32)
+    train_dl, val_dl = create_dls(batch_size=32)
 
     trainer = pl.Trainer(
         max_epochs=300,

@@ -226,7 +226,7 @@ class VQGAN2(pl.LightningModule):
 
 if __name__ == "__main__":
     from argparse import ArgumentParser
-    from vqgan.cifar100_data import create_cifar100_dls
+    from vqgan.cifar100_data import create_dls
     from pytorch_lightning.loggers import TensorBoardLogger
 
     parser = ArgumentParser()
@@ -242,7 +242,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    train_dl, val_dl = create_cifar100_dls(batch_size=args.batch_size)
+    train_dl, val_dl = create_dls(batch_size=args.batch_size)
 
     if args.feat_model == 'none':
         args.feat_model = None

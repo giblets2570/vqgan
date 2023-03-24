@@ -127,7 +127,7 @@ class VQVAE(pl.LightningModule):
 
 if __name__ == "__main__":
     from argparse import ArgumentParser
-    from vqgan.cifar100_data import create_cifar100_dls
+    from vqgan.dataset import create_dls
     from pytorch_lightning.loggers import TensorBoardLogger
 
     parser = ArgumentParser()
@@ -140,10 +140,12 @@ if __name__ == "__main__":
     parser.add_argument('--beta', default=0.2, type=float)
     parser.add_argument('--use-noise', action='store_true')
     parser.add_argument('--use-codebook-sampling', action='store_true')
+    parser.add_argument('--dataset', default='cifar100')
 
     args = parser.parse_args()
 
-    train_dl, val_dl = create_cifar100_dls(batch_size=args.batch_size)
+    train_dl, val_dl = create_dls(
+        batch_size=args.batch_size, dataset=args.dataset)
 
     if args.feat_model == 'none':
         args.feat_model = None
@@ -164,7 +166,7 @@ if __name__ == "__main__":
         logger=TensorBoardLogger(
             save_dir='lightning_logs/',
             name='vqvae',
-            sub_dir=f'nc={args.n_codes},ld={args.latent_dim},m={args.m},b={args.beta},d={args.dropout_prob}'
+            sub_dir=f'nc={args.n_codes},ld={args.latent_dim},m={args.m},b={args.beta},d={args.dropout_prob},dataset={args.dataset}'
         )
     )
     trainer.fit(

@@ -7,7 +7,7 @@ import numpy as np
 import seaborn
 from pathlib import Path
 from glob import glob
-from vqgan.cifar100_data import create_cifar100_dls
+from vqgan.cifar100_data import create_dls
 import torch
 import matplotlib.pyplot as plt
 from sklearn.cluster import DBSCAN
@@ -47,7 +47,7 @@ if checkpoint_path:
 
     plt.clf()
 
-    _, val_dl = create_cifar100_dls()
+    _, val_dl = create_dls()
 
     n_occurances = np.zeros((codes.shape[0], ))
 
