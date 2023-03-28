@@ -7,7 +7,7 @@ import numpy as np
 import seaborn
 from pathlib import Path
 from glob import glob
-from vqgan.cifar100_data import create_dls
+from vqgan.dataset import create_dls
 import torch
 import matplotlib.pyplot as plt
 from sklearn.cluster import DBSCAN

@@ -52,13 +52,42 @@ class VQWGAN(pl.LightningModule):
             latent_dim=latent_dim, n_codes=n_codes, use_sampling=use_codebook_sampling)
         self.decoder = CNNDecoder(
             in_channels=latent_dim, m=m, dropout_prob=dropout_prob)
-        self.discriminator = CNNDiscriminator(m=m, dropout_prob=dropout_prob)
+        self.discriminator = CNNDiscriminator(
+            m=m, dropout_prob=dropout_prob, use_bn=False)
         self.perceptual_loss = LPIPS(net=feat_model, lpips=False)
         self.beta = beta
         self.use_noise = use_noise
         self.n_warmup_epochs = n_warmup_epochs
         self.n_critic = n_critic
         self.lambda_ma = MovingAverage(5)
+        self.penalty_coef = 10
+
+    def __compute_gp(self, real_data, fake_data):
+        batch_size = real_data.size(0)
+        # Sample Epsilon from uniform distribution
+        eps = torch.rand(batch_size, 1, 1, 1).to(real_data.device)
+        eps = eps.expand_as(real_data)
+
+        # Interpolation between real data and fake data.
+        interpolation = eps * real_data + (1 - eps) * fake_data
+
+        # get logits for interpolated images
+        interp_logits = self.discriminator(interpolation)
+        grad_outputs = torch.ones_like(interp_logits)
+
+        # Compute Gradients
+        gradients = torch.autograd.grad(
+            outputs=interp_logits,
+            inputs=interpolation,
+            grad_outputs=grad_outputs,
+            create_graph=True,
+            retain_graph=True,
+        )[0]
+
+        # Compute and return Gradient Norm
+        gradients = gradients.view(batch_size, -1)
+        grad_norm = gradients.norm(2, 1)
+        return torch.mean((grad_norm - 1) ** 2)
 
     def __add_noise(self, image):
         bs = image.shape[0]
@@ -98,12 +127,14 @@ class VQWGAN(pl.LightningModule):
         # the discriminator is now a critic
         # Critic Loss = [average critic score on real images] – [average critic score on fake images]
         g_loss = (self.discriminator(image) -
-                  self.discriminator(r_image)).mean()
+                  self.discriminator(r_image)).pow(2).mean()
         self.log("g_loss", g_loss, prog_bar=True)
+        # need to add the gradient penalty
+        grad_penalty = self.__compute_gp(image, r_image)
 
         optimizer_d.zero_grad()
-        self.manual_backward(g_loss)
-        self.clip_gradients(optimizer_d, gradient_clip_val=0.01)
+        self.manual_backward(g_loss + self.penalty_coef * grad_penalty)
+        self.clip_gradients(optimizer_d, gradient_clip_val=1)
         optimizer_d.step()
         self.untoggle_optimizer(optimizer_d)
 
@@ -122,7 +153,7 @@ class VQWGAN(pl.LightningModule):
 
             optimizer_t.zero_grad()
             self.manual_backward(t_loss)
-            self.clip_gradients(optimizer_t, gradient_clip_val=0.01)
+            self.clip_gradients(optimizer_t, gradient_clip_val=1)
             optimizer_t.step()
 
             self.untoggle_optimizer(optimizer_t)
@@ -209,7 +240,7 @@ class VQWGAN(pl.LightningModule):
 
 if __name__ == "__main__":
     from argparse import ArgumentParser
-    from vqgan.cifar100_data import create_dls
+    from vqgan.dataset import create_dls
     from pytorch_lightning.loggers import TensorBoardLogger
 
     parser = ArgumentParser()
@@ -222,10 +253,12 @@ if __name__ == "__main__":
     parser.add_argument('--beta', default=0.2, type=float)
     parser.add_argument('--use-noise', action='store_true')
     parser.add_argument('--use-codebook-sampling', action='store_true')
+    parser.add_argument('--dataset', default='cifar100')
 
     args = parser.parse_args()
 
-    train_dl, val_dl = create_dls(batch_size=args.batch_size)
+    train_dl, val_dl = create_dls(
+        batch_size=args.batch_size, dataset=args.dataset)
 
     if args.feat_model == 'none':
         args.feat_model = None

@@ -83,19 +83,25 @@ class ConditionalCodeGenerator(CodeGenerator):
 
 
 if __name__ == '__main__':
-    from vqgan.cifar100_data import create_dls
+    from vqgan.dataset import create_dls
     from pytorch_lightning.loggers import TensorBoardLogger
 
-    model = ConditionalCodeGenerator(
-        './lightning_logs/vqvae/version_1/checkpoints/epoch=98-step=154737.ckpt', n_conditions=100)
-    train_dl, val_dl = create_dls(batch_size=32)
+    # model = ConditionalCodeGenerator(
+    #     './lightning_logs/vqvae/version_4/checkpoints/epoch=130-step=25676.ckpt', n_conditions=10)
+
+    model = ConditionalCodeGenerator.load_from_checkpoint(
+        'lightning_logs/conditional_transformer/version_17/checkpoints/epoch=32-step=45837.ckpt')
+    train_dl, val_dl = create_dls(batch_size=36, dataset='cifar10')
 
     trainer = pl.Trainer(
         max_epochs=300,
         logger=TensorBoardLogger(
             save_dir='lightning_logs/',
             name='conditional_transformer',
-        )
+        ),
+        gradient_clip_val=0.5,
+        # precision='16-mixed',
+        # precision='bf16'
     )
     trainer.fit(
         model=model,

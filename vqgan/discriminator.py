@@ -6,9 +6,10 @@ from vqgan.downsample_block import DownSampleBlock
 
 class CNNDiscriminator(nn.Module):
 
-    def __init__(self, in_channels=3, out_channels=1, m=3, dropout_prob=0.5, channels=32):
+    def __init__(self, in_channels=3, out_channels=1, m=3, dropout_prob=0.5, channels=32, use_bn=True):
         super(CNNDiscriminator, self).__init__()
         self.dropout_prob = dropout_prob
+        self.use_bn = use_bn
         self.first_conv = nn.Conv2d(
             in_channels, channels, kernel_size=3, padding=1)
         res_downsample_layers = []
@@ -16,7 +17,7 @@ class CNNDiscriminator(nn.Module):
             in_c = channels * (i + 1)
             out_c = in_c + channels
             res_downsample_layers.append(
-                ResidualBlock(in_c, out_c, dropout_prob=dropout_prob))
+                ResidualBlock(in_c, out_c, dropout_prob=dropout_prob, use_bn=use_bn))
             res_downsample_layers.append(
                 DownSampleBlock(out_c, out_c))
 

@@ -54,15 +54,11 @@ class VQGAN2(pl.LightningModule):
             in_channels=latent_dim, m=m, dropout_prob=dropout_prob)
         self.discriminator = CNNDiscriminator(m=m, dropout_prob=dropout_prob)
         self.perceptual_loss = LPIPS(net=feat_model, lpips=False)
-        self.beta = beta
-        self.use_noise = use_noise
-        self.n_warmup_epochs = n_warmup_epochs
         self.lambda_ma = MovingAverage(5)
-        self.n_critic = n_critic
 
     def __compute_lamb(self, p_loss, gan_loss, current_epoch):
         lamb = 0
-        if current_epoch >= self.n_warmup_epochs:
+        if current_epoch >= self.hparams.n_warmup_epochs:
             delta = 1e-6
             numerators = torch.autograd.grad(
                 p_loss, self.decoder.output_layer.parameters(), retain_graph=True)
@@ -72,7 +68,7 @@ class VQGAN2(pl.LightningModule):
             for numerator, denominator in zip(numerators, denominators):
                 lamb += (torch.linalg.vector_norm(numerator) /
                          (torch.linalg.vector_norm(denominator) + delta))
-            lamb = lamb.clip(0, 100)
+            lamb = lamb.clip(0, 500)
         return self.lambda_ma.add(lamb).get()
 
     def __add_noise(self, image):
@@ -100,7 +96,7 @@ class VQGAN2(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         image, _ = batch
 
-        optimizer_d, optimizer_vae = self.optimizers()
+        optimizer_d, optimizer_t, optimizer_vae = self.optimizers()
 
         # first train the discriminator
         self.toggle_optimizer(optimizer_d)
@@ -109,6 +105,7 @@ class VQGAN2(pl.LightningModule):
         z_r = self.codebook.decode(z_q)
         self.decoder.requires_grad_()  # so I can compute lamb
         r_image = self.decoder(z_r)
+        p_loss = self.perceptual_loss(r_image, image).mean()
 
         disc_image = self.discriminator(image)
         valid = torch.ones_like(disc_image)
@@ -120,18 +117,38 @@ class VQGAN2(pl.LightningModule):
             self.discriminator(r_image), fake)
 
         g_loss = (real_loss + fake_loss) / 2
-        p_loss = self.perceptual_loss(r_image, image).mean()  # to find lambda
-        lamb = self.__compute_lamb(
-            p_loss, g_loss, self.trainer.current_epoch)
-
-        self.log("lamb", lamb, prog_bar=True)
-
         self.log("g_loss", g_loss, prog_bar=True)
 
-        self.manual_backward(lamb * g_loss)
-        optimizer_d.step()
+        lamb = self.__compute_lamb(p_loss, g_loss, self.trainer.current_epoch)
+        self.log("lamb", lamb, prog_bar=True)
+
         optimizer_d.zero_grad()
+        self.manual_backward(lamb * g_loss)
+        self.clip_gradients(optimizer_d, gradient_clip_val=0.2)
+        optimizer_d.step()
         self.untoggle_optimizer(optimizer_d)
+
+        if self.hparams.n_critic == 0 or (batch_idx + 1) % self.hparams.n_critic == 0:
+
+            self.toggle_optimizer(optimizer_t)
+
+            z = self.encoder(image)
+            z_q = self.codebook(z)
+            z_r = self.codebook.decode(z_q)
+            r_image = self.decoder(z_r)
+
+            # we need to add in the discriminator loss
+            # I dont want the gradients to reach the encoder
+            t_loss = F.binary_cross_entropy_with_logits(
+                self.discriminator(r_image), valid)
+            self.log("t_loss", t_loss, prog_bar=True)
+
+            optimizer_t.zero_grad()
+            self.manual_backward(lamb * t_loss)
+            self.clip_gradients(optimizer_t, gradient_clip_val=0.2)
+            optimizer_t.step()
+
+            self.untoggle_optimizer(optimizer_t)
 
         self.toggle_optimizer(optimizer_vae)
 
@@ -141,11 +158,6 @@ class VQGAN2(pl.LightningModule):
 
         c_loss = F.mse_loss(z_r, z.detach()) + F.mse_loss(z, z_r.detach())
         self.log("c_loss", c_loss / 2, prog_bar=True)
-
-        # we need to add in the discriminator loss
-        # I dont want the gradients to reach the encoder
-        t_loss = F.binary_cross_entropy_with_logits(
-            self.discriminator(self.decoder(z_r)), valid)
 
         z_r = z + (z_r - z).detach()  # trick to pass gradients
         r_image = self.decoder(z_r)
@@ -157,12 +169,11 @@ class VQGAN2(pl.LightningModule):
         self.log("r_loss", r_loss, prog_bar=True)
         self.log("p_loss", p_loss, prog_bar=True)
 
-        self.log("t_loss", t_loss, prog_bar=True)
-        if lamb == 0 or (batch_idx + 1) % self.n_critic == 0:
-            vae_loss = p_loss + self.beta * c_loss + lamb * t_loss
-            self.manual_backward(vae_loss)
-            optimizer_vae.step()
-            optimizer_vae.zero_grad()
+        vae_loss = p_loss + self.hparams.beta * c_loss
+        optimizer_vae.zero_grad()
+        self.manual_backward(vae_loss)
+        self.clip_gradients(optimizer_vae, gradient_clip_val=0.2)
+        optimizer_vae.step()
         self.untoggle_optimizer(optimizer_vae)
 
     def validation_step(self, batch, batch_idx):
@@ -210,6 +221,10 @@ class VQGAN2(pl.LightningModule):
             self.discriminator.parameters(),
             lr=1e-3
         )
+        opt_t = optim.Adam(
+            self.decoder.parameters(),
+            lr=1e-3
+        )
         opt_vae = optim.Adam(
             itertools.chain(
                 self.encoder.parameters(),
@@ -218,15 +233,16 @@ class VQGAN2(pl.LightningModule):
             ),
             lr=1e-3
         )
-        return [opt_d, opt_vae], [
-            optim.lr_scheduler.ReduceLROnPlateau(opt_d),
-            optim.lr_scheduler.ReduceLROnPlateau(opt_vae),
+        return [opt_d, opt_t, opt_vae], [
+            optim.lr_scheduler.ReduceLROnPlateau(opt_d, patience=3),
+            optim.lr_scheduler.ReduceLROnPlateau(opt_t, patience=3),
+            optim.lr_scheduler.ReduceLROnPlateau(opt_vae, patience=3),
         ]
 
 
 if __name__ == "__main__":
     from argparse import ArgumentParser
-    from vqgan.cifar100_data import create_dls
+    from vqgan.dataset import create_dls
     from pytorch_lightning.loggers import TensorBoardLogger
 
     parser = ArgumentParser()
@@ -239,6 +255,7 @@ if __name__ == "__main__":
     parser.add_argument('--beta', default=0.2, type=float)
     parser.add_argument('--use-noise', action='store_true')
     parser.add_argument('--use-codebook-sampling', action='store_true')
+    parser.add_argument('--dataset', default='cifar100')
 
     args = parser.parse_args()
 
@@ -247,16 +264,21 @@ if __name__ == "__main__":
     if args.feat_model == 'none':
         args.feat_model = None
 
-    vqgan2 = VQGAN2(
-        feat_model=args.feat_model,
-        latent_dim=args.latent_dim,
-        dropout_prob=args.dropout_prob,
-        n_codes=args.n_codes,
-        m=args.m,
-        beta=args.beta,
-        use_noise=args.use_noise,
-        use_codebook_sampling=args.use_codebook_sampling
-    )
+    # vqgan2 = VQGAN2(
+    #     feat_model=args.feat_model,
+    #     latent_dim=args.latent_dim,
+    #     dropout_prob=args.dropout_prob,
+    #     n_codes=args.n_codes,
+    #     m=args.m,
+    #     beta=args.beta,
+    #     use_noise=args.use_noise,
+    #     use_codebook_sampling=args.use_codebook_sampling
+    # )
+    vqgan2 = VQGAN2.load_from_checkpoint(
+        'lightning_logs/vqgan2/version_13/checkpoints/epoch=84-step=49980.ckpt')
+
+    vqgan2.hparams.n_critic = 0
+    vqgan2.hparams.n_warmup_epochs = 20
 
     trainer = pl.Trainer(
         max_epochs=300,
@@ -264,7 +286,7 @@ if __name__ == "__main__":
             save_dir='lightning_logs/',
             name='vqgan2',
             sub_dir=f'nc={args.n_codes},ld={args.latent_dim},m={args.m},b={args.beta},d={args.dropout_prob}'
-        )
+        ),
     )
     trainer.fit(
         model=vqgan2,
