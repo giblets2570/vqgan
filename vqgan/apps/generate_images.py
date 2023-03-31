@@ -40,7 +40,7 @@ if checkpoint_path:
 
     condition = condition.repeat(bs, 1)
 
-    sampling = st.checkbox('Use sampling')
+    sampling = st.checkbox('Use sampling', value=True)
 
     # create the source and target for the transformer decoder
     start = torch.full(
@@ -70,6 +70,9 @@ if checkpoint_path:
     decoder = None
     if 'vqvae' in generator.checkpoint_path:
         decoder = VQVAE.load_from_checkpoint(
+            generator.checkpoint_path).decoder.eval().to(DEVICE)
+    if 'vqgan' in generator.checkpoint_path:
+        decoder = VQGAN.load_from_checkpoint(
             generator.checkpoint_path).decoder.eval().to(DEVICE)
 
     with torch.no_grad():

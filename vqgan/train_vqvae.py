@@ -167,7 +167,9 @@ if __name__ == "__main__":
             save_dir='lightning_logs/',
             name='vqvae',
             sub_dir=f'nc={args.n_codes},ld={args.latent_dim},m={args.m},b={args.beta},d={args.dropout_prob},dataset={args.dataset}'
-        )
+        ),
+        gradient_clip_val=1,
+        # precision='16-mixed'
     )
     trainer.fit(
         model=vqvae,

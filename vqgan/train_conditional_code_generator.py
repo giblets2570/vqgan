@@ -17,7 +17,8 @@ class ConditionalCodeGenerator(CodeGenerator):
             vocab_size=self.codebook.n_codes + 1 + self.n_conditions,
             n_positions=self.n_positions + 1,  # +1 for the condition
             bos_token_id=self.codebook.n_codes,
-            eos_token_id=self.codebook.n_codes
+            eos_token_id=self.codebook.n_codes,
+            n_layer=3
         ))
 
     def training_step(self, batch, batch_idx):
@@ -29,7 +30,7 @@ class ConditionalCodeGenerator(CodeGenerator):
 
         with torch.no_grad():
             z = self.encoder(image)
-            codes = self.codebook(z)
+            codes = self.codebook(z, sample=False)
             # codes will be in the shape  h x w
             codes = rearrange(codes, 'b x y -> b (x y)')
 
@@ -61,7 +62,7 @@ class ConditionalCodeGenerator(CodeGenerator):
         condition = self.codebook.n_codes + 1 + condition
 
         z = self.encoder(image)
-        codes = self.codebook(z)
+        codes = self.codebook(z, sample=False)
         # codes will be in the shape  h x w
         codes = rearrange(codes, 'b x y -> b (x y)')
 
@@ -87,11 +88,11 @@ if __name__ == '__main__':
     from pytorch_lightning.loggers import TensorBoardLogger
 
     # model = ConditionalCodeGenerator(
-    #     './lightning_logs/vqvae/version_4/checkpoints/epoch=130-step=25676.ckpt', n_conditions=10)
+    #     'lightning_logs/vqgan/version_12/checkpoints/epoch=129-step=25480.ckpt', n_conditions=10)
 
     model = ConditionalCodeGenerator.load_from_checkpoint(
-        'lightning_logs/conditional_transformer/version_17/checkpoints/epoch=32-step=45837.ckpt')
-    train_dl, val_dl = create_dls(batch_size=36, dataset='cifar10')
+        'lightning_logs/conditional_transformer/version_25/checkpoints/epoch=6-step=5474.ckpt')
+    train_dl, val_dl = create_dls(batch_size=64, dataset='cifar10')
 
     trainer = pl.Trainer(
         max_epochs=300,
@@ -99,7 +100,7 @@ if __name__ == '__main__':
             save_dir='lightning_logs/',
             name='conditional_transformer',
         ),
-        gradient_clip_val=0.5,
+        gradient_clip_val=.5,
         # precision='16-mixed',
         # precision='bf16'
     )

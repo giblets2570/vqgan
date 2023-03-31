@@ -1,6 +1,7 @@
 import pytorch_lightning as pl
 import torch.optim as optim
 from vqgan.train_vqvae import VQVAE
+from vqgan.train_vqgan import VQGAN
 import itertools
 import torch
 from einops import rearrange
@@ -16,7 +17,7 @@ class CodeGenerator(pl.LightningModule):
         super().__init__()
         self.save_hyperparameters()
         self.checkpoint_path = checkpoint_path
-        vqvae = VQVAE.load_from_checkpoint(checkpoint_path)
+        vqvae = VQGAN.load_from_checkpoint(checkpoint_path)
         self.encoder = vqvae.encoder
         self.codebook = vqvae.codebook
         self.n_positions = (32 // 2 ** self.encoder.m) ** 2

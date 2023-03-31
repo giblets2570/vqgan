@@ -41,6 +41,30 @@ class VQGAN(pl.LightningModule):
         self.use_noise = use_noise
         self.n_warmup_epochs = n_warmup_epochs
 
+    @staticmethod
+    def load_from_vqvae_checkpoint(checkpoint_path, n_warmup_epochs=5):
+        from vqgan.train_vqvae import VQVAE
+
+        vqvae = VQVAE.load_from_checkpoint(checkpoint_path)
+
+        vqgan = VQGAN(
+            feat_model=vqvae.hparams.feat_model,
+            n_codes=vqvae.hparams.n_codes,
+            latent_dim=vqvae.hparams.latent_dim,
+            m=vqvae.hparams.m,
+            beta=vqvae.hparams.beta,
+            dropout_prob=vqvae.hparams.dropout_prob,
+            use_noise=vqvae.hparams.use_noise,
+            use_codebook_sampling=vqvae.hparams.use_codebook_sampling,
+            n_warmup_epochs=n_warmup_epochs
+        )
+
+        vqgan.encoder.load_state_dict(vqvae.encoder.state_dict())
+        vqgan.decoder.load_state_dict(vqvae.decoder.state_dict())
+        vqgan.codebook.load_state_dict(vqvae.codebook.state_dict())
+
+        return vqgan
+
     def __compute_lamb(self, p_loss, gan_loss, current_epoch):
         lamb = 0
         if current_epoch < self.n_warmup_epochs:
@@ -185,15 +209,20 @@ if __name__ == "__main__":
     if args.feat_model == 'none':
         args.feat_model = None
 
-    vqgan = VQGAN(
-        feat_model=args.feat_model,
-        latent_dim=args.latent_dim,
-        dropout_prob=args.dropout_prob,
-        n_codes=args.n_codes,
-        m=args.m,
-        beta=args.beta,
-        use_noise=args.use_noise,
-        use_codebook_sampling=args.use_codebook_sampling
+    # vqgan = VQGAN(
+    #     feat_model=args.feat_model,
+    #     latent_dim=args.latent_dim,
+    #     dropout_prob=args.dropout_prob,
+    #     n_codes=args.n_codes,
+    #     m=args.m,
+    #     beta=args.beta,
+    #     use_noise=args.use_noise,
+    #     use_codebook_sampling=args.use_codebook_sampling
+    # )
+
+    vqgan = VQGAN.load_from_vqvae_checkpoint(
+        'lightning_logs/vqvae/version_4/checkpoints/epoch=130-step=25676.ckpt',
+        n_warmup_epochs=0
     )
 
     trainer = pl.Trainer(
@@ -202,7 +231,8 @@ if __name__ == "__main__":
             save_dir='lightning_logs/',
             name='vqgan',
             sub_dir=f'nc={args.n_codes},ld={args.latent_dim},m={args.m},b={args.beta},d={args.dropout_prob},dataset={args.dataset}'
-        )
+        ),
+        gradient_clip_val=1
     )
     trainer.fit(
         model=vqgan,

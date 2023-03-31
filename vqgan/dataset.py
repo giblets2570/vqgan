@@ -28,7 +28,8 @@ class MSCOCODataset(IterableDataset):
 
             def preprocess(sample):
                 image, text = sample
-                image = Image.fromarray((image * 255).astype(np.uint8))
+                image = Image.fromarray(
+                    (image * 255).astype(np.uint8)).resize((128, 128))
                 image = self.transforms(image)
                 return image, text
             ds = iter(ds.decode('rgb').to_tuple("jpg", "txt").map(preprocess))
@@ -64,9 +65,9 @@ def create_dls(use_color_jitter=True, batch_size=32, dataset='cifar100'):
         test_dataset = CIFAR10('data/', download=True,
                                transform=dataset_transform, train=False)
         train_dl = DataLoader(
-            train_dataset, batch_size=batch_size, shuffle=True, num_workers=3)
+            train_dataset, batch_size=batch_size, shuffle=True)
         val_dl = DataLoader(test_dataset, batch_size=batch_size,
-                            shuffle=False, num_workers=3)
+                            shuffle=False)
 
     elif dataset == 'mscoco':
         stats = glob('./data/mscoco/*_stats.json')
